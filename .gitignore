@@ -4,6 +4,7 @@ node_modules/
 tsconfig.tsbuildinfo
 *.log
 .DS_Store
+.env*.local
 
 # Vendored skill dataset: 3.7 MB of third-party font, icon and style tables.
 # The skill definitions and scripts beside it are tracked; this is reinstallable.

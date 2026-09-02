@@ -1,5 +1,5 @@
 import { PrActivityInfo, PullRequestAssessment } from '../types/pr';
-import { executeGraphQL, executeRest, getViewerLogin, PRS_GRAPHQL_QUERY } from './github';
+import { executeRest, getViewerLogin, searchAllPullRequests } from './github';
 import { normalizePullRequests } from './normalizer';
 import { getPageSize, getQueryKey, getSearchQueries, MODES, type Mode } from './config';
 import { prEventEmitter } from './events';
@@ -189,14 +189,7 @@ export async function getDashboardState(mode: Mode, forceRefresh = false): Promi
 
     try {
       // Reviews mode needs two searches; GitHub ANDs qualifiers so they cannot be combined.
-      const settled = await Promise.allSettled(
-        queries.map((q) =>
-          executeGraphQL<{ search: { issueCount: number; nodes: any[] } }>(PRS_GRAPHQL_QUERY, {
-            query: q,
-            first,
-          }),
-        ),
-      );
+      const settled = await Promise.allSettled(queries.map((q) => searchAllPullRequests(q, first)));
 
       const failures = settled.filter((r) => r.status === 'rejected');
       if (failures.length === settled.length) {
@@ -208,15 +201,17 @@ export async function getDashboardState(mode: Mode, forceRefresh = false): Promi
 
       const byId = new Map<string, any>();
       let matchedTotal = 0;
+      let pageCapped = false;
       for (const r of settled) {
         if (r.status !== 'fulfilled') continue;
-        matchedTotal += r.value?.search?.issueCount || 0;
-        for (const n of r.value?.search?.nodes || []) {
+        matchedTotal += r.value.issueCount;
+        pageCapped = pageCapped || r.value.truncated;
+        for (const n of r.value.nodes) {
           if (n && n.number && !byId.has(n.id)) byId.set(n.id, n);
         }
       }
 
-      const truncated = byId.size < matchedTotal;
+      const truncated = byId.size < matchedTotal || pageCapped;
       let prs = normalizePullRequests(Array.from(byId.values()));
 
       // Only the priority zone refreshes on sync. Everything else is fetched lazily

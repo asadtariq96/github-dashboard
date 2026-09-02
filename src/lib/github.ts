@@ -274,9 +274,13 @@ mutation ConvertToDraft($input: ConvertPullRequestToDraftInput!) {
 `;
 
 export const PRS_GRAPHQL_QUERY = `
-query FetchOpenPullRequests($query: String!, $first: Int!) {
-  search(query: $query, type: ISSUE, first: $first) {
+query FetchOpenPullRequests($query: String!, $first: Int!, $after: String) {
+  search(query: $query, type: ISSUE, first: $first, after: $after) {
     issueCount
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
     nodes {
       ... on PullRequest {
         id
@@ -403,6 +407,44 @@ query FetchOpenPullRequests($query: String!, $first: Int!) {
   }
 }
 `;
+
+interface PrSearchPage {
+  search: {
+    issueCount: number;
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+    nodes: any[];
+  };
+}
+
+/**
+ * The nested review-thread/checks fields make each node expensive to resolve, so a
+ * single wide page (e.g. 50 nodes) times out at GitHub's edge with a 502 well before
+ * the response is ready. `first` stays small and safe; this walks the cursor to collect
+ * every match instead, stopping at `maxPages` so one huge search can't stall a refresh
+ * indefinitely.
+ */
+export async function searchAllPullRequests(
+  query: string,
+  first: number,
+  maxPages = 6,
+): Promise<{ issueCount: number; nodes: any[]; truncated: boolean }> {
+  const nodes: any[] = [];
+  let issueCount = 0;
+  let after: string | undefined;
+  let hasNextPage = true;
+  let pages = 0;
+
+  while (hasNextPage && pages < maxPages) {
+    const data = await executeGraphQL<PrSearchPage>(PRS_GRAPHQL_QUERY, { query, first, after });
+    issueCount = data?.search?.issueCount || 0;
+    nodes.push(...(data?.search?.nodes || []));
+    hasNextPage = data?.search?.pageInfo?.hasNextPage ?? false;
+    after = data?.search?.pageInfo?.endCursor ?? undefined;
+    pages++;
+  }
+
+  return { issueCount, nodes, truncated: hasNextPage };
+}
 
 /**
  * True when GitHub rejected an id rather than failing. That is a bad request from the
