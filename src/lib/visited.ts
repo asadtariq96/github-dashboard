@@ -25,9 +25,21 @@ export function recordVisit(key: string): void {
   }
 }
 
+/** Mark a set of PRs seen as of now. Deliberate only; never on a timer or on focus. */
+export function markAllSeen(keys: string[]): void {
+  try {
+    const map = getVisitedMap();
+    const now = Date.now();
+    for (const key of keys) map[key] = now;
+    localStorage.setItem(VISITED_STORAGE_KEY, JSON.stringify(map));
+  } catch (e) {
+    console.warn('Failed to mark PRs seen:', e);
+  }
+}
+
 export interface NewActivity {
-  count: number;      // human items only
-  total: number;      // incl. bots
+  count: number; // human items only
+  total: number; // incl. bots
   items: ActivityItem[];
   threshold: 'activity' | 'visited';
   thresholdTs: string; // ISO of the applied threshold
@@ -37,11 +49,7 @@ export interface NewActivity {
  * Effective threshold = max(since-your-last-activity, since-last-visit).
  * Counts human items only; bots are included in `items` for the drawer.
  */
-export function computeNew(
-  activity: PrActivityInfo | undefined,
-  key: string,
-  nowMs = Date.now()
-): NewActivity {
+export function computeNew(activity: PrActivityInfo | undefined, key: string): NewActivity {
   if (!activity || !activity.items || activity.items.length === 0) {
     return { count: 0, total: 0, items: [], threshold: 'activity', thresholdTs: '' };
   }

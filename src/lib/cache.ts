@@ -1,9 +1,11 @@
-import { DashboardSyncResponse, PrActivityInfo, PullRequestAssessment } from '../types/pr';
-import { executeGraphQL, executeRest, PRS_GRAPHQL_QUERY } from './github';
+import { PrActivityInfo, PullRequestAssessment } from '../types/pr';
+import { executeGraphQL, executeRest, getViewerLogin, PRS_GRAPHQL_QUERY } from './github';
 import { normalizePullRequests } from './normalizer';
-import { getSearchQuery } from './config';
+import { getPageSize, getQueryKey, getSearchQueries, MODES, type Mode } from './config';
 import { prEventEmitter } from './events';
 import { fetchPrActivity } from './activity';
+import { mapWithConcurrency } from './pool';
+import { isBlocked } from './status';
 
 interface CacheState {
   prs: PullRequestAssessment[];
@@ -12,87 +14,226 @@ interface CacheState {
   syncStatus: 'Healthy' | 'Syncing' | 'Stale Error';
   error?: string;
   activity: Record<string, PrActivityInfo>;
+  /** How many PRs the search matched, which can exceed the 50 the query returns. */
+  matchedTotal: number;
+  /** True when the search matched more than this list holds. */
+  truncated: boolean;
+  /** True when one of several searches failed and this list is incomplete. */
+  partial: boolean;
 }
 
-// In-memory cache singleton
-let cache: CacheState = {
-  prs: [],
-  lastUpdated: new Date().toISOString(),
-  query: '',
-  syncStatus: 'Healthy',
-  activity: {},
-};
+interface ModeState {
+  cache: CacheState;
+  /**
+   * The activity map lives here, not on `cache`. Sync replaces `cache` wholesale, so a
+   * lazy fetch landing mid-sync would otherwise be dropped while its timestamp said fresh.
+   */
+  activity: Record<string, PrActivityInfo>;
+  syncPromise: Promise<CacheState> | null;
+  lastSyncTimestamp: number;
+  /** Per-PR fetch time, keyed `repo#number`. Replaces one clock for the whole set. */
+  activityFetchedAt: Map<string, number>;
+  /** In-flight fetches, so two callers asking for the same PR share one request. */
+  activityInFlight: Map<string, Promise<void>>;
+}
 
-let syncPromise: Promise<CacheState> | null = null;
-let lastSyncTimestamp = 0;
-let lastActivitySyncTimestamp = 0;
 const CACHE_TTL_MS = 25 * 1000; // 25s cache freshness window for 30s polling cycle
 const ACTIVITY_TTL_MS = 5 * 60 * 1000; // per-PR timelines are heavy; refresh every 5 min
+const ACTIVITY_CONCURRENCY = 6;
 
-export async function getDashboardState(forceRefresh = false): Promise<CacheState> {
+function emptyState(): ModeState {
+  return {
+    cache: {
+      prs: [],
+      lastUpdated: new Date().toISOString(),
+      query: '',
+      syncStatus: 'Healthy',
+      activity: {},
+      matchedTotal: 0,
+      truncated: false,
+      partial: false,
+    },
+    activity: {},
+    syncPromise: null,
+    lastSyncTimestamp: 0,
+    activityFetchedAt: new Map(),
+    activityInFlight: new Map(),
+  };
+}
+
+// One cache slot per mode. Survives hot reload in development.
+const globalForCache = globalThis as unknown as { prModeStates?: Map<Mode, ModeState> };
+const modeStates: Map<Mode, ModeState> =
+  globalForCache.prModeStates ?? new Map(MODES.map((m) => [m, emptyState()]));
+if (process.env.NODE_ENV !== 'production') {
+  globalForCache.prModeStates = modeStates;
+}
+
+function stateFor(mode: Mode): ModeState {
+  let st = modeStates.get(mode);
+  if (!st) {
+    st = emptyState();
+    modeStates.set(mode, st);
+  }
+  // A hot reload can hand back a state built by an earlier shape of this module.
+  if (!(st.activityFetchedAt instanceof Map)) st.activityFetchedAt = new Map();
+  if (!(st.activityInFlight instanceof Map)) st.activityInFlight = new Map();
+  if (!st.activity) st.activity = st.cache?.activity ?? {};
+  return st;
+}
+
+function keyToRef(key: string): { repo: string; number: number } | null {
+  const at = key.lastIndexOf('#');
+  if (at < 0) return null;
+  const repo = key.slice(0, at);
+  const number = Number(key.slice(at + 1));
+  if (!repo || !Number.isFinite(number)) return null;
+  return { repo, number };
+}
+
+/**
+ * Fetch timelines for `keys` into a mode's activity map, skipping any that are fresh
+ * and any already in flight. Capped concurrency; mutates `st.cache.activity` in place.
+ */
+async function fetchActivityInto(
+  st: ModeState,
+  mode: Mode,
+  keys: string[],
+  force = false,
+): Promise<void> {
   const now = Date.now();
-  const query = getSearchQuery();
+  const wanted = keys.filter((key) => {
+    if (st.activityInFlight.has(key)) return false;
+    if (force) return true;
+    const at = st.activityFetchedAt.get(key);
+    return at === undefined || now - at > ACTIVITY_TTL_MS;
+  });
+
+  const pending = keys.map((k) => st.activityInFlight.get(k)).filter(Boolean) as Promise<void>[];
+
+  if (wanted.length > 0) {
+    const meLogin = await getViewerLogin();
+
+    // Register before any request starts, so a second caller waits instead of refetching.
+    const done = new Map<string, () => void>();
+    for (const key of wanted) {
+      st.activityInFlight.set(key, new Promise<void>((resolve) => done.set(key, resolve)));
+    }
+
+    await mapWithConcurrency(wanted, ACTIVITY_CONCURRENCY, async (key) => {
+      const ref = keyToRef(key);
+      try {
+        if (ref) {
+          const info = await fetchPrActivity(ref.repo, ref.number, meLogin);
+          st.activity = { ...st.activity, [key]: info };
+          st.activityFetchedAt.set(key, Date.now());
+        }
+      } catch (err) {
+        console.warn(`pr activity fetch failed for ${key}:`, err);
+      } finally {
+        st.activityInFlight.delete(key);
+        done.get(key)?.();
+      }
+    });
+  }
+
+  if (pending.length > 0) await Promise.allSettled(pending);
+}
+
+/** Activity for a specific set of PRs. Used by the lazy client endpoint. */
+export async function getActivityFor(
+  mode: Mode,
+  keys: string[],
+): Promise<Record<string, PrActivityInfo>> {
+  const st = stateFor(mode);
+  await fetchActivityInto(st, mode, keys);
+  const out: Record<string, PrActivityInfo> = {};
+  for (const key of keys) {
+    const info = st.activity[key];
+    if (info) out[key] = info;
+  }
+  return out;
+}
+
+/** Refresh every mode. A merge or an approval can change what appears in both. */
+export async function refreshAllModes(): Promise<void> {
+  await Promise.allSettled(MODES.map((m) => getDashboardState(m, true)));
+}
+
+/** Age in ms of the last successful sync for a mode, or null if never synced. */
+export function getLastCheckedAge(mode: Mode): number | null {
+  const st = stateFor(mode);
+  return st.lastSyncTimestamp === 0 ? null : Date.now() - st.lastSyncTimestamp;
+}
+
+export async function getDashboardState(mode: Mode, forceRefresh = false): Promise<CacheState> {
+  const now = Date.now();
+  const st = stateFor(mode);
+  const queries = getSearchQueries(mode);
+  const query = getQueryKey(mode);
+  const first = getPageSize(mode);
 
   // Return cached result if fresh and not forced
-  if (!forceRefresh && cache.prs.length > 0 && now - lastSyncTimestamp < CACHE_TTL_MS) {
-    return cache;
+  if (!forceRefresh && st.cache.prs.length > 0 && now - st.lastSyncTimestamp < CACHE_TTL_MS) {
+    return st.cache;
   }
 
   // Deduplicate concurrent refresh requests
-  if (syncPromise) {
-    return syncPromise;
+  if (st.syncPromise) {
+    return st.syncPromise;
   }
 
-  syncPromise = (async () => {
-    cache.syncStatus = 'Syncing';
-    cache.query = query;
+  st.syncPromise = (async () => {
+    st.cache.syncStatus = 'Syncing';
+    st.cache.query = query;
 
     try {
-      const data = await executeGraphQL<{
-        search: {
-          issueCount: number;
-          nodes: any[];
-        };
-      }>(PRS_GRAPHQL_QUERY, { query });
+      // Reviews mode needs two searches; GitHub ANDs qualifiers so they cannot be combined.
+      const settled = await Promise.allSettled(
+        queries.map((q) =>
+          executeGraphQL<{ search: { issueCount: number; nodes: any[] } }>(PRS_GRAPHQL_QUERY, {
+            query: q,
+            first,
+          }),
+        ),
+      );
 
-      const rawNodes = (data?.search?.nodes || []).filter((n) => n && n.number);
-      let prs = normalizePullRequests(rawNodes);
+      const failures = settled.filter((r) => r.status === 'rejected');
+      if (failures.length === settled.length) {
+        throw (failures[0] as PromiseRejectedResult).reason;
+      }
+      for (const f of failures) {
+        console.warn('search query failed:', (f as PromiseRejectedResult).reason);
+      }
 
-      // Per-PR "new activity since viewer's last action" (heavy; refresh on a longer TTL)
-      const activityStale = forceRefresh || Date.now() - lastActivitySyncTimestamp > ACTIVITY_TTL_MS;
-      let activity = cache.activity;
-      if (activityStale && prs.length > 0) {
-        const meLogin = prs[0]?.author?.login || '';
-        const results = await Promise.allSettled(
-          prs.map((p) =>
-            fetchPrActivity(p.repository.nameWithOwner, p.number, meLogin).then((info) => ({
-              key: `${p.repository.nameWithOwner}#${p.number}`,
-              info,
-            }))
-          )
-        );
-        const next: Record<string, PrActivityInfo> = {};
-        let failures = 0;
-        for (const r of results) {
-          if (r.status === 'fulfilled') {
-            next[r.value.key] = r.value.info;
-          } else {
-            failures++;
-            console.warn('pr activity fetch failed:', r.reason);
-          }
-        }
-        if (failures === 0 || Object.keys(next).length > 0) {
-          activity = next;
-          lastActivitySyncTimestamp = Date.now();
+      const byId = new Map<string, any>();
+      let matchedTotal = 0;
+      for (const r of settled) {
+        if (r.status !== 'fulfilled') continue;
+        matchedTotal += r.value?.search?.issueCount || 0;
+        for (const n of r.value?.search?.nodes || []) {
+          if (n && n.number && !byId.has(n.id)) byId.set(n.id, n);
         }
       }
+
+      const truncated = byId.size < matchedTotal;
+      let prs = normalizePullRequests(Array.from(byId.values()));
+
+      // Only the priority zone refreshes on sync. Everything else is fetched lazily
+      // by the client for the rows it is actually showing.
+      const blockedKeys = prs
+        .filter((p) => isBlocked(mode, p))
+        .map((p) => `${p.repository.nameWithOwner}#${p.number}`);
+      await fetchActivityInto(st, mode, blockedKeys, forceRefresh);
 
       // Check for active merge_group workflow runs waiting for manual environment deployment approvals
       const mergeQueuePRs = prs.filter((p) => p.isInMergeQueue);
       if (mergeQueuePRs.length > 0) {
         // Collect distinct repositories that have PRs in merge queue
-        const reposWithMQ = Array.from(new Set(mergeQueuePRs.map((p) => p.repository.nameWithOwner)));
-        
+        const reposWithMQ = Array.from(
+          new Set(mergeQueuePRs.map((p) => p.repository.nameWithOwner)),
+        );
+
         await Promise.allSettled(
           reposWithMQ.map(async (repoWithOwner) => {
             try {
@@ -106,7 +247,9 @@ export async function getDashboardState(forceRefresh = false): Promise<CacheStat
                 }>;
               }>(`repos/${repoWithOwner}/actions/runs?event=merge_group&per_page=15`);
 
-              const waitingRuns = (runsData?.workflow_runs || []).filter((r) => r.status === 'waiting');
+              const waitingRuns = (runsData?.workflow_runs || []).filter(
+                (r) => r.status === 'waiting',
+              );
 
               for (const run of waitingRuns) {
                 // Check if head_branch matches pr-XXXX
@@ -114,7 +257,7 @@ export async function getDashboardState(forceRefresh = false): Promise<CacheStat
                 if (match) {
                   const prNumber = parseInt(match[1], 10);
                   const matchingPR = prs.find(
-                    (p) => p.repository.nameWithOwner === repoWithOwner && p.number === prNumber
+                    (p) => p.repository.nameWithOwner === repoWithOwner && p.number === prNumber,
                   );
                   if (matchingPR && matchingPR.mergeQueueInfo) {
                     // Fetch pending deployments for this run
@@ -130,7 +273,8 @@ export async function getDashboardState(forceRefresh = false): Promise<CacheStat
                         .map((d) => d.environment?.id)
                         .filter((id): id is number => typeof id === 'number');
 
-                      const envName = pendingDeploys?.[0]?.environment?.name || 'production deployment';
+                      const envName =
+                        pendingDeploys?.[0]?.environment?.name || 'production deployment';
                       const envUrl = run.html_url;
 
                       matchingPR.mergeQueueInfo.isWaitingForApproval = true;
@@ -153,34 +297,37 @@ export async function getDashboardState(forceRefresh = false): Promise<CacheStat
             } catch (e) {
               console.warn(`Failed to inspect merge_group runs for ${repoWithOwner}:`, e);
             }
-          })
+          }),
         );
       }
 
-      cache = {
+      st.cache = {
         prs,
         lastUpdated: new Date().toISOString(),
         query,
         syncStatus: 'Healthy',
         error: undefined,
-        activity,
+        activity: st.activity,
+        matchedTotal,
+        truncated,
+        partial: failures.length > 0,
       };
-      lastSyncTimestamp = Date.now();
-      prEventEmitter.emit();
-      return cache;
+      st.lastSyncTimestamp = Date.now();
+      prEventEmitter.emit(mode);
+      return st.cache;
     } catch (err: any) {
       console.error('GitHub PR Sync Error:', err);
       // Graceful degradation: Retain stale data but mark error
-      cache = {
-        ...cache,
+      st.cache = {
+        ...st.cache,
         syncStatus: 'Stale Error',
         error: err.message || 'Failed to sync with GitHub GraphQL API',
       };
-      return cache;
+      return st.cache;
     } finally {
-      syncPromise = null;
+      st.syncPromise = null;
     }
   })();
 
-  return syncPromise;
+  return st.syncPromise;
 }

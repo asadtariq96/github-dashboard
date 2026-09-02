@@ -1,16 +1,18 @@
 import {
-  PullRequestAssessment,
-  LifecycleStatus,
-  ReviewStatus,
-  ChecksStatus,
-  MergeabilityStatus,
   CheckRunItem,
+  ChecksStatus,
+  LifecycleStatus,
+  MergeabilityStatus,
+  PullRequestAssessment,
+  ReviewStatus,
   ReviewThreadItem,
+  ViewerReviewState,
 } from '../types/pr';
 
 interface RawComment {
   id: string;
-  body: string;
+  bodyText: string;
+  bodyHTML: string;
   createdAt: string;
   url: string;
   author: {
@@ -22,9 +24,17 @@ interface RawComment {
 interface RawReviewThread {
   id: string;
   isResolved: boolean;
+  isOutdated?: boolean;
+  viewerCanReply?: boolean;
+  viewerCanResolve?: boolean;
+  viewerCanUnresolve?: boolean;
   path: string;
   line: number | null;
+  startLine?: number | null;
+  diffSide?: string | null;
+  resolvedBy?: { login: string } | null;
   comments: {
+    totalCount?: number;
     nodes: RawComment[];
   };
 }
@@ -37,6 +47,8 @@ interface RawCheckRunContext {
   conclusion: string | null;
   detailsUrl: string | null;
   isRequired?: boolean;
+  startedAt?: string | null;
+  completedAt?: string | null;
 }
 
 interface RawStatusContext {
@@ -46,6 +58,7 @@ interface RawStatusContext {
   state: string;
   targetUrl: string | null;
   isRequired?: boolean;
+  createdAt?: string | null;
 }
 
 type RawContextNode = RawCheckRunContext | RawStatusContext;
@@ -61,13 +74,22 @@ interface RawPRNode {
   updatedAt: string;
   headRefName: string;
   baseRefName: string;
+  additions?: number;
+  deletions?: number;
+  changedFiles?: number;
+  bodyHTML?: string;
   mergeable: string; // 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN'
   isInMergeQueue: boolean;
   viewerCanUpdateBranch?: boolean;
   mergeStateStatus?: string; // 'BEHIND', 'BLOCKED', 'CLEAN', 'DIRTY', 'DRAFT', 'HAS_HOOKS', 'UNKNOWN', 'UNSTABLE'
   mergeQueueEntry?: {
+    id?: string;
     state: string;
     position?: number;
+    enqueuedAt?: string | null;
+    estimatedTimeToMerge?: number | null;
+    solo?: boolean | null;
+    jump?: boolean | null;
     mergeQueue?: {
       url?: string;
     };
@@ -87,6 +109,10 @@ interface RawPRNode {
     } | null;
   };
   reviewDecision?: string | null; // 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED'
+  viewerLatestReview?: {
+    state: string;
+    submittedAt?: string | null;
+  } | null;
   latestReviews?: {
     nodes: Array<{
       state: string;
@@ -101,6 +127,7 @@ interface RawPRNode {
   commits?: {
     nodes: Array<{
       commit: {
+        committedDate?: string | null;
         statusCheckRollup?: {
           state: string;
           contexts?: {
@@ -111,6 +138,25 @@ interface RawPRNode {
     }>;
   };
 }
+
+/** One entry per person, in the order they first replied. */
+function dedupeByLogin(comments: RawComment[]): { login: string; avatarUrl?: string }[] {
+  const seen = new Map<string, { login: string; avatarUrl?: string }>();
+  for (const comment of comments) {
+    const login = comment.author?.login;
+    if (!login || seen.has(login)) continue;
+    seen.set(login, { login, avatarUrl: comment.author?.avatarUrl || undefined });
+  }
+  return Array.from(seen.values());
+}
+
+const VIEWER_REVIEW_STATES: Record<string, ViewerReviewState> = {
+  APPROVED: 'Approved',
+  CHANGES_REQUESTED: 'Changes Requested',
+  COMMENTED: 'Commented',
+  DISMISSED: 'Dismissed',
+  PENDING: 'Pending',
+};
 
 export function normalizePullRequests(rawNodes: RawPRNode[]): PullRequestAssessment[] {
   // Step 1: Map raw PRs to intermediate structure
@@ -137,6 +183,16 @@ export function normalizePullRequests(rawNodes: RawPRNode[]): PullRequestAssessm
       else review = 'Review Required';
     }
 
+    // 2b. The viewer's own standing. Drives /reviews.
+    const viewerReview = VIEWER_REVIEW_STATES[pr.viewerLatestReview?.state || ''] || 'None';
+    const viewerReviewedAt = pr.viewerLatestReview?.submittedAt || undefined;
+    const lastCommitAt = pr.commits?.nodes?.[0]?.commit?.committedDate || undefined;
+    const viewerReviewStale = Boolean(
+      viewerReviewedAt &&
+      lastCommitAt &&
+      new Date(lastCommitAt).getTime() > new Date(viewerReviewedAt).getTime(),
+    );
+
     // 3. Checks Dimension & Check Runs extraction
     const rollup = pr.commits?.nodes?.[0]?.commit?.statusCheckRollup;
     const rollupState = rollup?.state; // SUCCESS, FAILURE, PENDING, EXPECTED, ERROR
@@ -159,15 +215,25 @@ export function normalizePullRequests(rawNodes: RawPRNode[]): PullRequestAssessm
           conclusion: c.conclusion,
           detailsUrl: c.detailsUrl,
           isRequired: !isOptional,
+          startedAt: c.startedAt || undefined,
+          completedAt: c.completedAt || undefined,
         };
       } else {
+        const done = c.state !== 'PENDING';
         return {
           id: c.id,
           name: c.context,
-          status: c.state === 'PENDING' ? 'IN_PROGRESS' : 'COMPLETED',
-          conclusion: c.state === 'SUCCESS' ? 'SUCCESS' : c.state === 'FAILURE' || c.state === 'ERROR' ? 'FAILURE' : null,
+          status: done ? 'COMPLETED' : 'IN_PROGRESS',
+          conclusion:
+            c.state === 'SUCCESS'
+              ? 'SUCCESS'
+              : c.state === 'FAILURE' || c.state === 'ERROR'
+                ? 'FAILURE'
+                : null,
           detailsUrl: c.targetUrl,
           isRequired: !isOptional,
+          startedAt: c.createdAt || undefined,
+          completedAt: done ? c.createdAt || undefined : undefined,
         };
       }
     });
@@ -175,14 +241,20 @@ export function normalizePullRequests(rawNodes: RawPRNode[]): PullRequestAssessm
     const hasFailedRequiredCheck = checkRuns.some(
       (c) =>
         c.isRequired &&
-        (c.conclusion === 'FAILURE' || c.conclusion === 'TIMED_OUT' || c.conclusion === 'ACTION_REQUIRED')
+        (c.conclusion === 'FAILURE' ||
+          c.conclusion === 'TIMED_OUT' ||
+          c.conclusion === 'ACTION_REQUIRED'),
     );
     const hasFailedNonRequiredCheck = checkRuns.some(
       (c) =>
         !c.isRequired &&
-        (c.conclusion === 'FAILURE' || c.conclusion === 'TIMED_OUT' || c.conclusion === 'ACTION_REQUIRED')
+        (c.conclusion === 'FAILURE' ||
+          c.conclusion === 'TIMED_OUT' ||
+          c.conclusion === 'ACTION_REQUIRED'),
     );
-    const hasRunningCheck = checkRuns.some((c) => c.status === 'IN_PROGRESS' || c.status === 'QUEUED');
+    const hasRunningCheck = checkRuns.some(
+      (c) => c.status === 'IN_PROGRESS' || c.status === 'QUEUED',
+    );
 
     let checks: ChecksStatus = 'None';
     if (hasFailedRequiredCheck) {
@@ -204,18 +276,38 @@ export function normalizePullRequests(rawNodes: RawPRNode[]): PullRequestAssessm
     const unresolvedThreads: ReviewThreadItem[] = threads
       .filter((t) => !t.isResolved && t.comments?.nodes?.length > 0)
       .map((t) => {
-        const firstComment = t.comments.nodes[0];
-        const lastComment = t.comments.nodes[t.comments.nodes.length - 1];
+        const raw = t.comments.nodes;
+        const firstComment = raw[0];
+        const lastComment = raw[raw.length - 1];
+        const replies = raw.slice(1);
         return {
           id: t.id,
           isResolved: t.isResolved,
+          isOutdated: Boolean(t.isOutdated),
           path: t.path,
           line: t.line,
+          startLine: t.startLine ?? null,
+          diffSide: t.diffSide || 'RIGHT',
+          resolvedBy: t.resolvedBy?.login,
+          viewerCanReply: t.viewerCanReply !== false,
+          viewerCanResolve: Boolean(t.viewerCanResolve),
+          viewerCanUnresolve: Boolean(t.viewerCanUnresolve),
           author: lastComment?.author?.login || firstComment?.author?.login || 'Unknown',
           authorAvatarUrl: lastComment?.author?.avatarUrl || firstComment?.author?.avatarUrl,
-          bodyPreview: lastComment?.body || firstComment?.body || '',
+          bodyPreview: lastComment?.bodyText || firstComment?.bodyText || '',
           createdAt: lastComment?.createdAt || firstComment?.createdAt || '',
           url: lastComment?.url || firstComment?.url || pr.url,
+          replyCount: Math.max((t.comments.totalCount ?? raw.length) - 1, 0),
+          replies: dedupeByLogin(replies),
+          comments: raw.map((c) => ({
+            id: c.id,
+            author: c.author?.login || 'ghost',
+            authorAvatarUrl: c.author?.avatarUrl || undefined,
+            bodyHTML: c.bodyHTML || '',
+            bodyText: c.bodyText || '',
+            createdAt: c.createdAt,
+            url: c.url,
+          })),
         };
       });
 
@@ -247,17 +339,22 @@ export function normalizePullRequests(rawNodes: RawPRNode[]): PullRequestAssessm
           isWaitingForApproval: Boolean(approvalCheck),
           approvalStepName: approvalCheck?.name,
           approvalStepUrl: approvalCheck?.detailsUrl || undefined,
+          entryId: pr.mergeQueueEntry?.id,
+          enqueuedAt: pr.mergeQueueEntry?.enqueuedAt || undefined,
+          estimatedTimeToMerge: pr.mergeQueueEntry?.estimatedTimeToMerge ?? undefined,
+          solo: Boolean(pr.mergeQueueEntry?.solo),
+          jump: Boolean(pr.mergeQueueEntry?.jump),
         }
       : undefined;
 
-    const canUpdateBranch = Boolean(
-      pr.viewerCanUpdateBranch || pr.mergeStateStatus === 'BEHIND'
-    );
+    const canUpdateBranch = Boolean(pr.viewerCanUpdateBranch || pr.mergeStateStatus === 'BEHIND');
 
     if (inQueue) {
       mergeability = 'In Merge Queue';
     } else if (pr.mergeable === 'CONFLICTING') {
       mergeability = 'Merge Conflicts';
+    } else if (pr.mergeStateStatus === 'BEHIND') {
+      mergeability = 'Behind Base Branch';
     } else if (pr.mergeable === 'MERGEABLE') {
       // Must pass review, required checks, and not be draft to be Ready to Merge
       if (review !== 'Approved' || checks === 'Failing' || pr.isDraft) {
@@ -275,6 +372,7 @@ export function normalizePullRequests(rawNodes: RawPRNode[]): PullRequestAssessm
       checks === 'Failing' ||
       review === 'Changes Requested' ||
       mergeability === 'Merge Conflicts' ||
+      mergeability === 'Behind Base Branch' ||
       unresolvedThreads.length > 0;
 
     return {
@@ -296,12 +394,20 @@ export function normalizePullRequests(rawNodes: RawPRNode[]): PullRequestAssessm
       isDraft: pr.isDraft,
       createdAt: pr.createdAt,
       updatedAt: pr.updatedAt,
+      additions: pr.additions ?? 0,
+      deletions: pr.deletions ?? 0,
+      changedFiles: pr.changedFiles ?? 0,
+      bodyHTML: pr.bodyHTML ?? '',
       lifecycle,
       review,
       checks,
       mergeability,
       unresolvedThreadsCount: unresolvedThreads.length,
       isStacked: false,
+      viewerReview,
+      viewerReviewedAt,
+      lastCommitAt,
+      viewerReviewStale,
       needsAttention,
       isInMergeQueue: inQueue,
       hasRepoMergeQueue: Boolean(pr.repository.mergeQueue),
@@ -314,7 +420,7 @@ export function normalizePullRequests(rawNodes: RawPRNode[]): PullRequestAssessm
 
   // Step 2: Stacked PR detection
   // A PR is stacked if its baseRefName matches the headRefName of another open PR in the same repository
-  const headMap = new Map<string, typeof rawAssessments[0]>();
+  const headMap = new Map<string, (typeof rawAssessments)[0]>();
   for (const pr of rawAssessments) {
     headMap.set(`${pr.repository.nameWithOwner}:${pr.headRefName}`, pr);
   }
@@ -323,7 +429,11 @@ export function normalizePullRequests(rawNodes: RawPRNode[]): PullRequestAssessm
     const parentKey = `${pr.repository.nameWithOwner}:${pr.baseRefName}`;
     const parentPR = headMap.get(parentKey);
 
-    const isStacked = Boolean(parentPR) || (pr.baseRefName !== pr.defaultBranch && pr.baseRefName !== 'master' && pr.baseRefName !== 'main');
+    const isStacked =
+      Boolean(parentPR) ||
+      (pr.baseRefName !== pr.defaultBranch &&
+        pr.baseRefName !== 'master' &&
+        pr.baseRefName !== 'main');
 
     return {
       id: pr.id,
@@ -337,6 +447,10 @@ export function normalizePullRequests(rawNodes: RawPRNode[]): PullRequestAssessm
       isDraft: pr.isDraft,
       createdAt: pr.createdAt,
       updatedAt: pr.updatedAt,
+      additions: pr.additions,
+      deletions: pr.deletions,
+      changedFiles: pr.changedFiles,
+      bodyHTML: pr.bodyHTML,
       lifecycle: pr.lifecycle,
       review: pr.review,
       checks: pr.checks,
@@ -351,6 +465,10 @@ export function normalizePullRequests(rawNodes: RawPRNode[]): PullRequestAssessm
             headRefName: parentPR.headRefName,
           }
         : undefined,
+      viewerReview: pr.viewerReview,
+      viewerReviewedAt: pr.viewerReviewedAt,
+      lastCommitAt: pr.lastCommitAt,
+      viewerReviewStale: pr.viewerReviewStale,
       needsAttention: pr.needsAttention,
       isInMergeQueue: pr.isInMergeQueue,
       hasRepoMergeQueue: pr.hasRepoMergeQueue,

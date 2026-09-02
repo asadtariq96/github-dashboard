@@ -1,17 +1,26 @@
+import type { Mode } from './config';
+
 type Listener = () => void;
 
 class EventEmitter {
-  private listeners: Set<Listener> = new Set();
+  private listeners: Map<Mode, Set<Listener>> = new Map();
 
-  subscribe(listener: Listener): () => void {
-    this.listeners.add(listener);
+  subscribe(mode: Mode, listener: Listener): () => void {
+    let set = this.listeners.get(mode);
+    if (!set) {
+      set = new Set();
+      this.listeners.set(mode, set);
+    }
+    set.add(listener);
     return () => {
-      this.listeners.delete(listener);
+      this.listeners.get(mode)?.delete(listener);
     };
   }
 
-  emit(): void {
-    Array.from(this.listeners).forEach((listener) => {
+  emit(mode: Mode): void {
+    const set = this.listeners.get(mode);
+    if (!set) return;
+    Array.from(set).forEach((listener) => {
       try {
         listener();
       } catch (err) {
