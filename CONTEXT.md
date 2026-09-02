@@ -63,20 +63,32 @@ A synthesized view filtering for PRs that require author action (e.g. failing ch
 _Avoid_: Broken PRs, urgent list
 
 **Waiting Approval Priority**:
-The highest ranking tier in the dashboard, automatically pinning pull requests waiting on manual CI/CD environment or deployment approvals to the top of all views.
+Rank 1 of the eight blocked-on-you ranks, holding pull requests waiting on a manual deployment approval at the top of the priority zone under the default sort.
 _Avoid_: Pinned PR, sticky row
 
-**PR Detail Drawer**:
-An expandable inspection view under a PR row displaying actionable check failures and unresolved review thread excerpts.
-_Avoid_: Modal, popup
+**Priority Zone**:
+The **Blocked on you** section above **Everything else**. It appears on the unfiltered view only, because every other view is already a narrowing the split would fight. `blockedReason` is its single definition, shared with the card's status label.
+_Avoid_: Urgent list, top section
 
-**Signal-First Badge**:
-A status badge rendered only when an active blocker, milestone, or notable state exists, omitting neutral or redundant baseline statuses.
-_Avoid_: Static column badge, table header
+**PR Card**:
+The unit of the list. One pull request, collapsed to a single block carrying identity, diff, status chips, both timestamps and one primary action, expanding in place to four tabs.
+_Avoid_: Row, table row, tile
 
-**Density Variant**:
-A presentation setting toggling between continuous compact rows (`Compact List`) and discrete elevated blocks (`Spaced Cards`), with customizable responsive grid columns (1 to 4 columns).
-_Avoid_: Layout mode, grid view
+**Card Body**:
+The expanded half of a PR card, holding the Description, Merge queue, Checks and Threads tabs. It opens in place, never as a modal or a side sheet.
+_Avoid_: Drawer, modal, popup, sheet
+
+**Status Chip**:
+A bordered label rendered only when an active blocker, milestone, or notable state exists, carrying a word or an icon beside its colour. Neutral baseline states are omitted.
+_Avoid_: Badge, pill, static column badge
+
+**Severity Edge**:
+The 3px coloured left border of a PR card, encoding how urgent it is against the cards above and below it.
+_Avoid_: Rail, stripe, accent bar
+
+**Primary Action**:
+The single action a PR card shows, chosen from the ordered list in `allActionsFor`. Actions that undo progress, closing and dequeuing, are excluded from that list and can never appear here.
+_Avoid_: CTA, main button
 
 **Hidden PR**:
 A pull request explicitly excluded by the user from the primary dashboard view, persisted in local browser storage, and manageable via the Hidden PRs view.
@@ -91,5 +103,25 @@ An event-driven cache invalidation triggered immediately when a GitHub webhook p
 _Avoid_: Push notification, alert
 
 **Sync Status**:
-The operational state of the background synchronization poller (`Healthy`, `Syncing`, or `Stale Error`).
-_Avoid_: Connection status, API state
+The operational state of the server-side cache (`Healthy`, `Syncing`, or `Stale Error`). There is no background poller; the browser polls and the cache refreshes lazily behind a 25 second freshness window.
+_Avoid_: Connection status, API state, poller status
+
+**Speculative Merge Commit**:
+The commit GitHub's merge queue builds to test a pull request together with the entries ahead of it. Its own checks, not the pull request's, decide whether the queue merges.
+_Avoid_: Merge commit, batch commit
+
+**Merge Queue Step**:
+One stage of a queued pull request's progress, derived from the entry state, the speculative rollup and any deployment hold. GitHub publishes no step API.
+_Avoid_: Pipeline stage, queue phase
+
+**Thread Reply / Thread Resolution**:
+A user-initiated comment added to an existing review thread, or a change to that thread's resolved state, both issued from the dashboard and gated on what GitHub says the viewer may do.
+_Avoid_: Comment, close thread
+
+**Unread Activity**:
+Comments, reviews and commits by other people on a pull request since the viewer's own last activity on it or last visit, whichever is later.
+_Avoid_: New comments, notifications
+
+**Batch Selection**:
+A set of pull requests picked by checkbox, with shift selecting a range, driving actions that are safe to fire across many at once. Merging, closing, dequeuing and approving a deployment are excluded.
+_Avoid_: Bulk edit, multi-select mode

@@ -4,7 +4,7 @@ import type { Transition, Variants } from 'motion/react';
  * Motion's own tokens, kept in step with the CSS custom properties in globals.css.
  * The library cannot read those, so the numbers are repeated here and nowhere else.
  *
- * MASTER.md sets the durations: instant 120ms, fast 180ms, base 260ms, exit 170ms,
+ * DESIGN.md sets the durations: instant 120ms, fast 180ms, base 260ms, exit 170ms,
  * which is about 65% of the entrance. Easing `--ease-out` is cubic-bezier(0.16, 1, 0.3, 1).
  */
 export const EASE_OUT = [0.16, 1, 0.3, 1] as const;
@@ -38,7 +38,7 @@ export function revealDelay(index: number): number {
 }
 
 /**
- * The list reveal, from MASTER.md: opacity 0 to 1, translateY 8px to 0, 300ms.
+ * The list reveal, from DESIGN.md: opacity 0 to 1, translateY 8px to 0, 300ms.
  * It runs on first paint only. A row that arrives from the event stream must not move,
  * so the list passes `initial={false}` once it has painted.
  */
