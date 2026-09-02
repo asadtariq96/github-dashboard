@@ -40,7 +40,7 @@ function myCommitIdentity(): { name: string; email: string } {
 export async function fetchPrActivity(
   repo: string,
   number: number,
-  meLogin: string
+  meLogin: string,
 ): Promise<PrActivityInfo> {
   const me = myCommitIdentity();
   const acts: Act[] = [];
@@ -48,7 +48,7 @@ export async function fetchPrActivity(
   for (let page = 1; page <= MAX_PAGES; page++) {
     const events = await executeRest<TimelineEvent[]>(
       `repos/${repo}/issues/${number}/timeline?per_page=100&page=${page}`,
-      { headers: { Accept: TIMELINE_ACCEPT } }
+      { headers: { Accept: TIMELINE_ACCEPT } },
     );
     if (!events || events.length === 0) break;
 
@@ -58,17 +58,41 @@ export async function fetchPrActivity(
       if (ev === 'commented') {
         const login = e.user?.login || '';
         if (!e.created_at) continue;
-        acts.push({ ts: e.created_at, login, kind: 'comment', url: e.html_url || '', text: (e.body || '').trim(), state: '', isMe: login === meLogin });
+        acts.push({
+          ts: e.created_at,
+          login,
+          kind: 'comment',
+          url: e.html_url || '',
+          text: (e.body || '').trim(),
+          state: '',
+          isMe: login === meLogin,
+        });
       } else if (ev === 'reviewed') {
         const login = e.user?.login || '';
         if (!e.submitted_at) continue;
-        acts.push({ ts: e.submitted_at, login, kind: 'review', url: e.html_url || '', text: (e.body || '').trim(), state: ((e.state || '').toLowerCase()), isMe: login === meLogin });
+        acts.push({
+          ts: e.submitted_at,
+          login,
+          kind: 'review',
+          url: e.html_url || '',
+          text: (e.body || '').trim(),
+          state: (e.state || '').toLowerCase(),
+          isMe: login === meLogin,
+        });
       } else if (ev === 'committed') {
         const au = e.author;
         if (!au?.date) continue;
         const name = au.name || '';
         const email = (au.email || '').toLowerCase();
-        acts.push({ ts: au.date, login: name, kind: 'commit', url: e.html_url || '', text: (e.body || '').trim(), state: '', isMe: name === me.name || email === me.email });
+        acts.push({
+          ts: au.date,
+          login: name,
+          kind: 'commit',
+          url: e.html_url || '',
+          text: (e.body || '').trim(),
+          state: '',
+          isMe: name === me.name || email === me.email,
+        });
       }
       if (e.user?.login === meLogin || auCheck(e, me)) foundMine = true;
     }

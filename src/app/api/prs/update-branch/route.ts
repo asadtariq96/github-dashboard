@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeGraphQL, UPDATE_BRANCH_MUTATION } from '../../../../lib/github';
-import { getDashboardState } from '../../../../lib/cache';
+import { refreshAllModes } from '../../../../lib/cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,14 +20,14 @@ export async function POST(req: NextRequest) {
     });
 
     // Invalidate and refresh cache immediately
-    await getDashboardState(true);
+    await refreshAllModes();
 
     return NextResponse.json({ ok: true, message: 'Branch update requested successfully' });
   } catch (err: any) {
     console.error('Update branch error:', err);
     return NextResponse.json(
       { ok: false, error: err.message || 'Failed to update branch' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

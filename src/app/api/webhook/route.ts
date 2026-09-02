@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDashboardState } from '../../../lib/cache';
+import { refreshAllModes } from '../../../lib/cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
 
     // Trigger instant cache re-fetch asynchronously if relevant event
     if (relevantEvents.includes(event) || event === 'ping' || event === 'unknown') {
-      getDashboardState(true).catch((err) => {
+      refreshAllModes().catch((err) => {
         console.error('[Webhook] Failed to refresh state:', err);
       });
     }
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     return NextResponse.json(
       { ok: false, error: err.message || 'Webhook processing failed' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

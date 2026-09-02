@@ -1,18 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeRest } from '../../../../lib/github';
-import { getDashboardState } from '../../../../lib/cache';
+import { refreshAllModes } from '../../../../lib/cache';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { repoWithOwner, runId, environmentIds, comment = 'Approved via GitHub PR Dashboard' } = body;
+    const {
+      repoWithOwner,
+      runId,
+      environmentIds,
+      comment = 'Approved via GitHub PR Dashboard',
+    } = body;
 
     if (!repoWithOwner || !runId) {
       return NextResponse.json(
         { ok: false, error: 'repoWithOwner and runId are required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -33,7 +38,7 @@ export async function POST(req: NextRequest) {
     if (!targetEnvIds || targetEnvIds.length === 0) {
       return NextResponse.json(
         { ok: false, error: 'No pending deployment environments found for this workflow run' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -48,7 +53,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Invalidate and refresh cache immediately
-    await getDashboardState(true);
+    await refreshAllModes();
 
     return NextResponse.json({
       ok: true,
@@ -58,7 +63,7 @@ export async function POST(req: NextRequest) {
     console.error('Approve deployment error:', err);
     return NextResponse.json(
       { ok: false, error: err.message || 'Failed to approve deployment' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

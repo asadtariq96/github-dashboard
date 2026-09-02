@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeGraphQL, MERGE_PR_MUTATION, ENQUEUE_PR_MUTATION } from '../../../../lib/github';
-import { getDashboardState } from '../../../../lib/cache';
+import { refreshAllModes } from '../../../../lib/cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,14 +42,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Invalidate and refresh cache immediately
-    await getDashboardState(true);
+    await refreshAllModes();
 
     return NextResponse.json({ ok: true, message: 'PR merge/enqueue initiated successfully' });
   } catch (err: any) {
     console.error('Merge PR error:', err);
     return NextResponse.json(
       { ok: false, error: err.message || 'Failed to merge pull request' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

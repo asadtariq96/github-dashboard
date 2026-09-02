@@ -1,20 +1,31 @@
 import { NextRequest } from 'next/server';
 import { prEventEmitter } from '../../../lib/events';
+import { isMode } from '../../../lib/config';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
+  const raw = req.nextUrl.searchParams.get('mode');
+  const mode = isMode(raw) ? raw : 'mine';
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
     start(controller) {
       // Send initial connection event
-      controller.enqueue(encoder.encode(`event: connected\ndata: ${JSON.stringify({ time: new Date().toISOString() })}\n\n`));
+      controller.enqueue(
+        encoder.encode(
+          `event: connected\ndata: ${JSON.stringify({ time: new Date().toISOString() })}\n\n`,
+        ),
+      );
 
       // Subscribe to backend cache updates
-      const unsubscribe = prEventEmitter.subscribe(() => {
+      const unsubscribe = prEventEmitter.subscribe(mode, () => {
         try {
-          controller.enqueue(encoder.encode(`event: update\ndata: ${JSON.stringify({ time: new Date().toISOString() })}\n\n`));
+          controller.enqueue(
+            encoder.encode(
+              `event: update\ndata: ${JSON.stringify({ time: new Date().toISOString() })}\n\n`,
+            ),
+          );
         } catch {
           unsubscribe();
         }
