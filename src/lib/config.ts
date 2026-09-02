@@ -60,10 +60,12 @@ export function getQueryKey(mode: Mode): string {
 
 /**
  * The list query nests check runs and review threads, so GitHub times out well before
- * 50 nodes. Measured: 50 fails with a 502, 25 completes in about 8.5s.
+ * 50 nodes — measured 502s starting at 15 for an account with heavy PRs, stable at 10.
+ * `searchAllPullRequests` pages through the rest with the search cursor, so this only
+ * needs to be small enough for one page to resolve, not large enough to cover a result set.
  */
-export function getPageSize(mode: Mode): number {
+export function getPageSize(_mode: Mode): number {
   const raw = Number(process.env.GITHUB_PAGE_SIZE);
   if (Number.isFinite(raw) && raw > 0) return Math.min(raw, 50);
-  return mode === 'reviews' ? 25 : 50;
+  return 10;
 }
