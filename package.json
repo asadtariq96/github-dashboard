@@ -6,14 +6,20 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "oxlint src",
+    "format": "oxfmt src tailwind.config.ts",
+    "format:check": "oxfmt --check src tailwind.config.ts",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run lint && npm run format:check"
   },
   "dependencies": {
     "clsx": "^2.1.1",
     "lucide-react": "^1.16.0",
+    "motion": "^13.1.1",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "sonner": "^2.0.8",
     "tailwind-merge": "^3.0.0"
   },
   "devDependencies": {
@@ -21,6 +27,8 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "autoprefixer": "^10.4.20",
+    "oxfmt": "^0.66.0",
+    "oxlint": "^1.81.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2"
