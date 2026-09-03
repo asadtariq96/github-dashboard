@@ -362,9 +362,16 @@ has none, the diff itself, and editing the description.
 
 ---
 
-## 10. Known problem
+## 10. Paging the search
 
-`getPageSize` in `src/lib/config.ts` returns **50** for Mine. The comment above it records the
-measurement: 50 fails with a 502, 25 completes in about 8.5s. The dev log has shown GitHub
-answering 504 on the Mine query. Dropping Mine to 25 matches the comment and costs visible
-pull requests.
+The list query nests review threads and check runs, so a wide search page times out at
+GitHub's edge with a 502 long before the response is ready. Measured: 502s start around 15
+nodes on an account with many open pull requests, and 10 is stable.
+
+A small `first` alone is safe but silently drops every match past the first page. So the
+search connection is walked by cursor instead: pages of **10**, up to **6** of them, covering
+60 matches. `getPageSize` returns 10 for both modes, because the timeout is a GitHub-side
+limit and has nothing to do with which mode is asking.
+
+`truncated` on the response still means the search matched more than the walk returned, and
+the UI says so rather than pretending the list is complete.
