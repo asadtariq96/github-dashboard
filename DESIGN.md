@@ -30,9 +30,9 @@ up. Snoozes remain browser-local and are never written to GitHub.
 GitHub already does browsing, code review and writing comments better. This exists to find
 the blocked items faster than GitHub's own list, and to clear them without a page load.
 
-**A pull request is blocked on you** when only you can move it forward. `blockedReason` in
-`src/lib/status.ts` is the single definition, and both the priority zone and the row label
-read it, so they cannot disagree.
+`blockedReason` in `src/lib/status.ts` supplies the detailed urgency ranking. `needsAction` in
+`src/lib/workQueue.ts` turns that ranking into the **Act now** view while excluding a healthy
+merge queue, which is moving without the engineer.
 
 ---
 
@@ -81,6 +81,9 @@ The activity map lives on `st.activity`, not `st.cache.activity`, because a sync
 **Three ways a change reaches the screen**, all ending on a warm cache: a webhook to
 `refreshAllModes()` to `prEventEmitter.emit()` to SSE to a refetch (seconds, needs a tunnel);
 the refresh button; and the 30s poll as the fallback that always works.
+When `GITHUB_WEBHOOK_SECRET` is configured, the webhook verifies GitHub's SHA-256 signature
+before invalidating. The app binds to localhost by default and must not be exposed without that
+protection because mutation routes use the operator's GitHub token.
 
 **Failure is graceful.** A failed sync keeps the old list and flips `syncStatus` to
 `Stale Error`. The list renders under an error banner rather than going blank.
@@ -91,13 +94,10 @@ the refresh button; and the 30s poll as the fallback that always works.
 
 - A sticky **72px header**: title, Mine/Reviews switch, search, sync dot and time, refresh,
   theme toggle.
-- A **260px left rail**, collapsing to 68px. Views with live counts, then a repository
-  filter. The collapse keeps the toggle and view icons on fixed rows and hides the repository
-  section completely, so nothing shifts vertically. Mine: Open, Needs you, Failing, Ready, In
-  queue, Drafts, Hidden.
+- A **260px left rail**, collapsing to 68px. Work-queue views come first, followed by diagnostic
+  views with live counts and a repository filter. The collapse keeps the toggle and view icons on
+  fixed rows and hides the repository section completely, so nothing shifts vertically.
 - A filter bar: active-filter chips, a sort menu, a count, and Mark all seen.
-- **Blocked on you**, then **Everything else**. The split shows only on the unfiltered view;
-  every other view is already a narrowing the split would fight.
 - A stack of cards, 16px apart.
 
 **Filters and sort live in the URL** (`view`, `repo`, `q`, `sort`), so the back button
@@ -105,16 +105,16 @@ restores a filter set and a link carries one. Only non-default values are writte
 view, repository or sort pushes; typing replaces after 300ms.
 
 **Sort** has four orders: Priority (blocked first, the default), Updated newest, Updated
-oldest, Opened newest. A comparator sorts *within* the priority zone and never merges it.
-The control is a `menuitemradio` menu with `aria-checked`, not `aria-sort`, which is only
-valid on a column header.
+oldest, Opened newest. The control is a `menuitemradio` menu with `aria-checked`, not
+`aria-sort`, which is only valid on a column header.
 
 ---
 
 ## 4. The card
 
-One pull request. Collapsed it is about 62px; a two-line identity block plus status chips
-does not fit the 40px a dense row would want, and that is the trade the layout makes.
+One pull request. It is about 62px at full width; a two-line identity block plus status chips
+does not fit the 40px a dense row would want, and that is the trade the layout makes. In the
+narrow master column, title readability takes priority and status wraps below it.
 
 ```
 ▌ ▾ ⑂  Add streaming support to event bus consumer   #2457      +312 −48 ▬▬  ⊘ 18/21 ●2  ⌸ 7     Opened 3w ago    [ Add to queue ▾ ]
@@ -211,10 +211,11 @@ merge changes what appears in each.
 | `/api/threads/resolve` | `resolveReviewThread` / `unresolveReviewThread` |
 
 **Progress is never silent.** `busy` is a record keyed by PR id, so several rows work at once
-and each holds its own spinner for the whole write *and* the refresh that follows. A row
+and each holds its own spinner for the authoritative write. The follow-up cache refresh runs in
+the background so a successful mutation, toast, and inspector dismissal land together. A row
 whose primary control is a link, and so cannot hold a spinner, gets a standalone one. The
-confirm dialog holds itself open with a spinner rather than firing and vanishing. A second
-write on the *same* PR is refused.
+confirm dialog holds itself open with a spinner until GitHub answers. A second write on the
+*same* PR is refused.
 
 **Selection** with shift for a range drives a floating toolbar. It offers an action only when
 a selected PR supports it, so no button sits there dead. Batch covers `update-branch` and
@@ -301,7 +302,7 @@ read custom properties. Change both together.
 | `--dur-exit` | 170ms | Every exit, about 65% of the entrance |
 | `--ease-out` | `cubic-bezier(0.16, 1, 0.3, 1)` | Anything arriving |
 | `--ease-in` | `cubic-bezier(0.4, 0, 1, 1)` | Anything leaving |
-| `CARD_SPRING` | stiffness 420, damping 34, mass 0.9 | A card opening |
+| `CARD_SPRING` | stiffness 420, damping 34, mass 0.9 | Floating surfaces and list reflow |
 | `REORDER_SPRING` | stiffness 320, damping 32, mass 1 | Rows moving after a sort |
 
 **List reveal**, first paint only: opacity 0 to 1, translateY 8px to 0, 300ms, 30ms apart,
@@ -315,10 +316,10 @@ Two traps, both hit while building it:
 - `AnimatePresence` must **not** carry `initial={false}`. That prop exists to suppress the
   enter animation on the first render, which is the one render the reveal is for.
 
-**Rules.** Transform and opacity only, never width, height, top or left. Exits shorter than
-entrances. Cancel a running animation on the next state change and set the final state
-directly; never depend on an animation-end event for correctness. Every animation shows cause
-and effect. Nothing blocks input.
+**Rules.** Prefer transform and opacity. The master/detail workspace is the one deliberate
+layout transition: its grid tracks animate so opening and closing the inspector does not make
+components jump. Exits are shorter than entrances. Never depend on an animation-end event for
+correctness. Every animation shows cause and effect. Nothing blocks input.
 
 `back.out(1.4)` was tried and dropped: the overshoot reads as sloppy on dense data.
 
@@ -359,12 +360,10 @@ Not optional, and it has already changed decisions.
 
 **Rejected, with the reason.**
 
-- **A slide-over detail sheet.** Detail opens in place, under the card. An always-open right
-  pane was tried and rejected; a sheet would add a third layer to list, card body, sheet.
+- **An in-place accordion for PR details.** It made the work queue move while reading and lost
+  context when navigating. The persistent, resizable inspector keeps the queue visible instead.
 - **Preset filter pills.** That is the rail, which already has the same six views with live
   counts. Two controls for one job.
-- **A command palette.** 18 rows on one screen, a header search field and seven rail views.
-  It would mostly duplicate the search box. `/`, `Esc` and `j`/`k` are the real gap.
 - **`react-markdown`.** `bodyHTML` is GitHub's own renderer and strictly higher fidelity.
 - **Density variants and a 1–4 column grid.** Both built, both removed as noise.
 - **Reviewer avatars and "waiting on X" on the card.** No person on the card. Faces appear

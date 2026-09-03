@@ -80,7 +80,7 @@ export interface BlockedReason {
 /**
  * Why this PR is blocked on the viewer, or null when it is not.
  * The rank order is fixed by the design system: the thing only you can unblock comes
- * first, mechanical fixes come last. The rail counts and the priority zone both read
+ * first, mechanical fixes come last. Detailed rail views and priority sorting both read
  * this function, so they cannot disagree.
  */
 export function blockedReason(mode: Mode, pr: PullRequestAssessment): BlockedReason | null {

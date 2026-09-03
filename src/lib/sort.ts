@@ -35,10 +35,7 @@ function time(iso: string): number {
   return new Date(iso).getTime();
 }
 
-/**
- * The chosen order applies inside each group, never across them. The priority zone
- * stays a zone whatever the sort says.
- */
+/** Build the comparator for the currently filtered work queue. */
 export function makeComparator(
   mode: Mode,
   id: SortId,

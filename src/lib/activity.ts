@@ -28,9 +28,18 @@ interface Act {
 
 function myCommitIdentity(): { name: string; email: string } {
   return {
-    name: process.env.GITHUB_USER_NAME || 'Asad Tariq',
-    email: (process.env.GITHUB_USER_EMAIL || 'asad.tariq@unity3d.com').toLowerCase(),
+    name: process.env.GITHUB_USER_NAME?.trim() || '',
+    email: process.env.GITHUB_USER_EMAIL?.trim().toLowerCase() || '',
   };
+}
+
+function isMyCommitIdentity(
+  author: { name?: string | null; email?: string | null } | null | undefined,
+  me: { name: string; email: string },
+): boolean {
+  if (!author) return false;
+  const email = (author.email || '').toLowerCase();
+  return Boolean((me.name && author.name === me.name) || (me.email && email === me.email));
 }
 
 /**
@@ -91,7 +100,7 @@ export async function fetchPrActivity(
           url: e.html_url || '',
           text: (e.body || '').trim(),
           state: '',
-          isMe: name === me.name || email === me.email,
+          isMe: isMyCommitIdentity({ name, email }, me),
         });
       }
       if (e.user?.login === meLogin || auCheck(e, me)) foundMine = true;
@@ -129,6 +138,5 @@ export async function fetchPrActivity(
 }
 
 function auCheck(e: TimelineEvent, me: { name: string; email: string }): boolean {
-  const au = e.author;
-  return !!au && (au.name === me.name || (au.email || '').toLowerCase() === me.email);
+  return isMyCommitIdentity(e.author, me);
 }

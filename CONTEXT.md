@@ -63,20 +63,20 @@ A synthesized view filtering for PRs that require author action (e.g. failing ch
 _Avoid_: Broken PRs, urgent list
 
 **Waiting Approval Priority**:
-Rank 1 of the eight blocked-on-you ranks, holding pull requests waiting on a manual deployment approval at the top of the priority zone under the default sort.
+Rank 1 of the eight blocked-on-you ranks, holding pull requests waiting on a manual deployment approval at the top under the default priority sort.
 _Avoid_: Pinned PR, sticky row
 
 **Priority Zone**:
-The **Blocked on you** section above **Everything else**. It appears on the unfiltered view only, because every other view is already a narrowing the split would fight. `blockedReason` is its single definition, shared with the card's status label.
-_Avoid_: Urgent list, top section
+The former **Blocked on you** split above **Everything else**. It was replaced by the explicit **Act now** and **Waiting** work-queue views; `blockedReason` still supplies the urgency ranking within views.
+_Avoid_: Using this term for the current interface
 
 **PR Card**:
-The unit of the list. One pull request, collapsed to a single block carrying identity, diff, status chips, both timestamps and one primary action, expanding in place to four tabs.
+The unit of the list. One pull request carrying identity, diff, status chips, both timestamps and one primary action. Selecting it opens the persistent inspector.
 _Avoid_: Row, table row, tile
 
-**Card Body**:
-The expanded half of a PR card, holding the Description, Merge queue, Checks and Threads tabs. It opens in place, never as a modal or a side sheet.
-_Avoid_: Drawer, modal, popup, sheet
+**PR Inspector**:
+The resizable detail pane beside the work queue, holding the Description, Merge queue, Checks and Threads tabs. Below the desktop breakpoint it becomes a bounded bottom drawer.
+_Avoid_: Modal, popup, expanded row
 
 **Status Chip**:
 A bordered label rendered only when an active blocker, milestone, or notable state exists, carrying a word or an icon beside its colour. Neutral baseline states are omitted.

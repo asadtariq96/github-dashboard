@@ -262,8 +262,8 @@ export async function getDashboardState(mode: Mode, forceRefresh = false): Promi
               (a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime(),
             );
 
-      // Only the priority zone refreshes on sync. Everything else is fetched lazily
-      // by the client for the rows it is actually showing.
+      // Refresh activity for urgency-ranked PRs during sync. Everything else is fetched
+      // lazily by the client for the rows it is actually showing.
       const blockedKeys = prs
         .filter((p) => isBlocked(mode, p))
         .map((p) => `${p.repository.nameWithOwner}#${p.number}`);

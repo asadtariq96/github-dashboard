@@ -10,7 +10,6 @@ import { toast } from 'sonner';
 import { ConfirmDialog, type ConfirmState } from './ConfirmDialog';
 import { BatchToolbar } from './BatchToolbar';
 import { actionById, failedRunUrls, type RowActionId } from '../lib/rowAction';
-import { isBlocked } from '../lib/status';
 import { DEFAULT_SORT, isSortId, makeComparator, type SortId } from '../lib/sort';
 import { readDeskParams, writeDeskUrl, deskParamsSearch, type DeskParams } from '../lib/urlState';
 import { SortMenu } from './SortMenu';
@@ -460,18 +459,15 @@ export function DashboardView({ mode }: { mode: Mode }) {
     unreadOf,
   ]);
 
-  /**
-   * The priority zone only appears on the unfiltered view. Every other view either is
-   * the blocked set already, or is a deliberate narrowing the zone would fight.
-   */
+  /** Keys for the rows currently on screen, used to lazily fill their activity timelines. */
   const visibleKeys = useMemo(
     () => filteredPRs.map((pr) => `${pr.repository.nameWithOwner}#${pr.number}`),
     [filteredPRs],
   );
 
   /**
-   * Fetch timelines for the rows on screen, and only those. The server already refreshed
-   * the priority zone, so this covers whatever else the current view is showing.
+   * Fetch timelines for the rows on screen, and only those. The server eagerly refreshes
+   * actionable PRs, so this fills whatever else the current view is showing.
    */
   useEffect(() => {
     const missing = visibleKeys.filter(
@@ -643,16 +639,6 @@ export function DashboardView({ mode }: { mode: Mode }) {
     markAllSeen(visibleKeys);
     setSeenVersion((v) => v + 1);
   };
-
-  const showZone = false;
-  const zonePRs = useMemo(
-    () => (showZone ? filteredPRs.filter((pr) => isBlocked(mode, pr)) : []),
-    [showZone, filteredPRs, mode],
-  );
-  const restPRs = useMemo(
-    () => (showZone ? filteredPRs.filter((pr) => !isBlocked(mode, pr)) : filteredPRs),
-    [showZone, filteredPRs, mode],
-  );
 
   const visiblePRs = useMemo(() => prs.filter((p) => !hiddenPRIds.has(p.id)), [prs, hiddenPRIds]);
   const hiddenCount = useMemo(
@@ -1045,28 +1031,7 @@ export function DashboardView({ mode }: { mode: Mode }) {
                 )
               ) : (
                 <>
-                  {zonePRs.length > 0 && (
-                    <section aria-labelledby="zone-heading" className="mb-8">
-                      <h2
-                        id="zone-heading"
-                        className="mb-2 flex items-center gap-2 font-mono text-2xs uppercase tracking-[0.14em] text-warn"
-                      >
-                        <span aria-hidden className="h-2.5 w-0.5 rounded-full bg-warn" />
-                        Blocked on you
-                        <span className="tabular text-dim">{zonePRs.length}</span>
-                      </h2>
-                      <PRCardList prs={zonePRs} {...listProps} />
-                    </section>
-                  )}
-
-                  {restPRs.length > 0 && showZone && zonePRs.length > 0 && (
-                    <h2 className="mb-2 flex items-center gap-2 font-mono text-2xs uppercase tracking-[0.14em] text-dim">
-                      Everything else
-                      <span className="tabular">{restPRs.length}</span>
-                    </h2>
-                  )}
-
-                  {restPRs.length === 0 && zonePRs.length === 0 ? (
+                  {filteredPRs.length === 0 ? (
                     <div className="rounded-md border border-line bg-surface px-6 py-16 text-center">
                       <p className="text-sm text-muted">Nothing in {activeViewLabel}.</p>
                       {selectedRepoSummary && selectedRepoSummary.hidden.length > 0 && (
@@ -1148,7 +1113,7 @@ export function DashboardView({ mode }: { mode: Mode }) {
                       )}
                     </div>
                   ) : (
-                    <PRCardList prs={restPRs} {...listProps} />
+                    <PRCardList prs={filteredPRs} {...listProps} />
                   )}
                 </>
               )}
