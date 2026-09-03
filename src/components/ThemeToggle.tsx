@@ -46,7 +46,7 @@ export function ThemeToggle() {
       onClick={cycle}
       aria-label={LABEL[theme]}
       title={LABEL[theme]}
-      className="tap-safe inline-flex items-center justify-center rounded-md border border-line bg-surface p-2 text-muted transition-colors duration-instant ease-out hover:border-line-strong hover:text-ink"
+      className="tap-safe inline-flex items-center justify-center rounded-lg border border-line bg-surface-raised p-2 text-muted shadow-sm transition-all duration-instant ease-out hover:-translate-y-px hover:border-line-strong hover:text-ink"
     >
       <Icon aria-hidden className="h-4 w-4" style={{ opacity: mounted ? 1 : 0 }} />
     </button>

@@ -3,35 +3,35 @@
 @tailwind utilities;
 
 /*
- * Light carries the values from the reference design and is the theme the app opens in.
+ * The palette borrows Opensource UI's warm editorial neutrals and sparing coral accent.
  * Dark is derived from the same ramps. A viewer reaches dark by the toggle, or by leaving
  * the toggle on "system" with a dark operating system.
  */
 :root {
   color-scheme: light;
 
-  --bg: #f4f5f7;
-  --surface: #ffffff;
+  --bg: #f7f7f4;
+  --surface: #fffefa;
   --surface-raised: #ffffff;
-  --surface-hover: #f9fafb;
-  --surface-muted: #f3f4f6;
+  --surface-hover: #f7f6f1;
+  --surface-muted: #f1f0eb;
 
-  --border: #e5e7eb;
-  --border-subtle: #f0f1f3;
-  --border-strong: #d1d5db;
-  --border-control: #8a93a3;
+  --border: #e6e4de;
+  --border-subtle: #efede8;
+  --border-strong: #d2cfc7;
+  --border-control: #aaa69d;
 
-  --text: #111827;
-  --text-muted: #4b5563;
-  --text-dim: #6b7280;
-  --text-faint: #9ca3af;
+  --text: #1d1d1b;
+  --text-muted: #575650;
+  --text-dim: #77746c;
+  --text-faint: #aaa69e;
 
-  --accent: #2563eb;
-  --accent-fill: #2563eb;
-  --accent-hover: #1d4ed8;
+  --accent: #c92f4c;
+  --accent-fill: #242422;
+  --accent-hover: #080808;
   --accent-on: #ffffff;
-  --accent-wash: #eff6ff;
-  --accent-border: #bfdbfe;
+  --accent-wash: #fff0f2;
+  --accent-border: #f2b7c1;
 
   --ready: #16a34a;
   --ready-fill: #166534;
@@ -52,11 +52,11 @@
 
   --info: #6b7280;
 
-  --grid-line: rgba(17, 24, 39, 0.035);
-  --selection: rgba(37, 99, 235, 0.16);
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-  --shadow-float: 0 1px 2px rgba(17, 24, 39, 0.06), 0 12px 28px rgba(17, 24, 39, 0.1);
+  --grid-line: rgba(29, 29, 27, 0.035);
+  --selection: rgba(201, 47, 76, 0.14);
+  --shadow-sm: 0 1px 1px rgba(29, 29, 27, 0.03), 0 8px 24px rgba(29, 29, 27, 0.035);
+  --shadow-md: 0 2px 2px rgba(29, 29, 27, 0.04), 0 14px 36px rgba(29, 29, 27, 0.07);
+  --shadow-float: 0 1px 0 rgba(255, 255, 255, 0.75) inset, 0 18px 48px rgba(29, 29, 27, 0.14);
 
   --space-1: 4px;
   --space-2: 8px;
@@ -66,15 +66,15 @@
   --space-8: 32px;
 
   --row-height: 40px;
-  --header-height: 56px;
-  --rail-width: 240px;
-  --rail-width-collapsed: 56px;
+  --header-height: 72px;
+  --rail-width: 260px;
+  --rail-width-collapsed: 68px;
   --target-min: 24px;
   --tap-min: 44px;
 
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
 
   --dur-instant: 120ms;
   --dur-fast: 180ms;
@@ -87,28 +87,28 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --bg: #0b0f19;
-  --surface: #111827;
-  --surface-raised: #161f2f;
-  --surface-hover: #1a2333;
-  --surface-muted: #1f2937;
+  --bg: #141412;
+  --surface: #1c1c1a;
+  --surface-raised: #232320;
+  --surface-hover: #292925;
+  --surface-muted: #30302b;
 
-  --border: #2a3546;
-  --border-subtle: #1e2836;
-  --border-strong: #3a4759;
-  --border-control: #6b7684;
+  --border: #343430;
+  --border-subtle: #2a2a27;
+  --border-strong: #4b4a44;
+  --border-control: #706e66;
 
-  --text: #f3f4f6;
-  --text-muted: #cbd2dc;
-  --text-dim: #9ca3af;
-  --text-faint: #6b7280;
+  --text: #f4f2ec;
+  --text-muted: #cbc7bd;
+  --text-dim: #9f9b91;
+  --text-faint: #716e67;
 
-  --accent: #60a5fa;
-  --accent-fill: #2563eb;
-  --accent-hover: #1d4ed8;
-  --accent-on: #ffffff;
-  --accent-wash: rgba(96, 165, 250, 0.12);
-  --accent-border: #1e40af;
+  --accent: #ff8298;
+  --accent-fill: #f4f2ec;
+  --accent-hover: #ffffff;
+  --accent-on: #181816;
+  --accent-wash: rgba(255, 130, 152, 0.12);
+  --accent-border: #7e3e4a;
 
   --ready: #4ade80;
   --ready-fill: #166534;
@@ -130,7 +130,7 @@
   --info: #9ca3af;
 
   --grid-line: rgba(255, 255, 255, 0.025);
-  --selection: rgba(96, 165, 250, 0.28);
+  --selection: rgba(255, 130, 152, 0.24);
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
   --shadow-float: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 12px 32px rgba(0, 0, 0, 0.6);
@@ -140,28 +140,28 @@
   :root:not([data-theme='light']):not([data-theme='dark']) {
     color-scheme: dark;
 
-    --bg: #0b0f19;
-    --surface: #111827;
-    --surface-raised: #161f2f;
-    --surface-hover: #1a2333;
-    --surface-muted: #1f2937;
+    --bg: #141412;
+    --surface: #1c1c1a;
+    --surface-raised: #232320;
+    --surface-hover: #292925;
+    --surface-muted: #30302b;
 
-    --border: #2a3546;
-    --border-subtle: #1e2836;
-    --border-strong: #3a4759;
-    --border-control: #6b7684;
+    --border: #343430;
+    --border-subtle: #2a2a27;
+    --border-strong: #4b4a44;
+    --border-control: #706e66;
 
-    --text: #f3f4f6;
-    --text-muted: #cbd2dc;
-    --text-dim: #9ca3af;
-    --text-faint: #6b7280;
+    --text: #f4f2ec;
+    --text-muted: #cbc7bd;
+    --text-dim: #9f9b91;
+    --text-faint: #716e67;
 
-    --accent: #60a5fa;
-    --accent-fill: #2563eb;
-    --accent-hover: #1d4ed8;
-    --accent-on: #ffffff;
-    --accent-wash: rgba(96, 165, 250, 0.12);
-    --accent-border: #1e40af;
+    --accent: #ff8298;
+    --accent-fill: #f4f2ec;
+    --accent-hover: #ffffff;
+    --accent-on: #181816;
+    --accent-wash: rgba(255, 130, 152, 0.12);
+    --accent-border: #7e3e4a;
 
     --ready: #4ade80;
     --ready-fill: #166534;
@@ -183,7 +183,7 @@
     --info: #9ca3af;
 
     --grid-line: rgba(255, 255, 255, 0.025);
-    --selection: rgba(96, 165, 250, 0.28);
+    --selection: rgba(255, 130, 152, 0.24);
     --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
     --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
     --shadow-float: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 12px 32px rgba(0, 0, 0, 0.6);
@@ -198,10 +198,34 @@
     font-size: 13px;
     line-height: 1.4;
     -webkit-font-smoothing: antialiased;
+    background-image:
+      radial-gradient(circle at 14% 3%, rgba(255, 122, 145, 0.07), transparent 22rem),
+      radial-gradient(circle at 87% 9%, rgba(112, 226, 232, 0.08), transparent 24rem);
+    background-attachment: fixed;
   }
 
   ::selection {
     background: var(--selection);
+  }
+}
+
+/* The master/inspector split is single-column below desktop and user-resizable above it. */
+@media (min-width: 1280px) {
+  .pr-workspace {
+    grid-template-columns: minmax(0, 100%) 0 0;
+    column-gap: 0;
+    transition:
+      grid-template-columns 200ms var(--ease-out),
+      column-gap 200ms var(--ease-out);
+  }
+
+  .pr-workspace[data-inspecting='true'] {
+    grid-template-columns: minmax(360px, var(--master-width)) 12px minmax(480px, 1fr);
+    column-gap: 8px;
+  }
+
+  .pr-workspace[data-resizing='true'] {
+    transition: none;
   }
 }
 

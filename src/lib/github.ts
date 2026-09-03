@@ -408,11 +408,50 @@ query FetchOpenPullRequests($query: String!, $first: Int!, $after: String) {
 }
 `;
 
+const RECENT_PRS_GRAPHQL_QUERY = `
+query FetchRecentPullRequests($query: String!, $first: Int!, $after: String) {
+  search(query: $query, type: ISSUE, first: $first, after: $after) {
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    nodes {
+      ... on PullRequest {
+        id
+        number
+        title
+        url
+        closedAt
+        mergedAt
+        repository {
+          nameWithOwner
+        }
+      }
+    }
+  }
+}
+`;
+
 interface PrSearchPage {
   search: {
     issueCount: number;
     pageInfo: { hasNextPage: boolean; endCursor: string | null };
     nodes: any[];
+  };
+}
+
+interface RecentPrSearchPage {
+  search: {
+    pageInfo: { hasNextPage: boolean; endCursor: string | null };
+    nodes: Array<{
+      id: string;
+      number: number;
+      title: string;
+      url: string;
+      closedAt: string | null;
+      mergedAt: string | null;
+      repository: { nameWithOwner: string };
+    }>;
   };
 }
 
@@ -444,6 +483,28 @@ export async function searchAllPullRequests(
   }
 
   return { issueCount, nodes, truncated: hasNextPage };
+}
+
+/** Recent history deliberately uses a small projection rather than the expensive detail query. */
+export async function searchRecentPullRequests(query: string, maxPages = 2) {
+  const nodes: RecentPrSearchPage['search']['nodes'] = [];
+  let after: string | undefined;
+  let hasNextPage = true;
+  let pages = 0;
+
+  while (hasNextPage && pages < maxPages) {
+    const data = await executeGraphQL<RecentPrSearchPage>(RECENT_PRS_GRAPHQL_QUERY, {
+      query,
+      first: 50,
+      after,
+    });
+    nodes.push(...(data?.search?.nodes || []));
+    hasNextPage = data?.search?.pageInfo?.hasNextPage ?? false;
+    after = data?.search?.pageInfo?.endCursor ?? undefined;
+    pages++;
+  }
+
+  return nodes;
 }
 
 /**

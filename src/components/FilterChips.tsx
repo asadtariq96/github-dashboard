@@ -30,7 +30,7 @@ export function FilterChips({
       {chips.map((chip) => (
         <span
           key={chip.id}
-          className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-sm border border-line bg-surface-raised py-0.5 pl-2 pr-1 text-xs"
+          className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-line bg-surface-raised py-1 pl-2.5 pr-1.5 text-xs shadow-sm"
         >
           <span className="shrink-0 text-dim">{chip.label}</span>
           <span className="min-w-0 truncate text-ink" title={chip.value}>

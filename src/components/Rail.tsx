@@ -16,6 +16,10 @@ import {
   FolderGit2,
   PanelLeft,
   PanelLeftClose,
+  BellRing,
+  Hourglass,
+  AlarmClock,
+  History,
   type LucideIcon,
 } from 'lucide-react';
 import type { Mode } from '../lib/config';
@@ -23,6 +27,10 @@ import type { PullRequestAssessment } from '../types/pr';
 import { blockedReason, isBlocked } from '../lib/status';
 
 export type MineViewId =
+  | 'act-now'
+  | 'waiting'
+  | 'snoozed'
+  | 'done-recently'
   | 'all'
   | 'needs-attention'
   | 'failing'
@@ -31,7 +39,16 @@ export type MineViewId =
   | 'drafts'
   | 'hidden';
 
-export type ReviewsViewId = 'needs-review' | 'review-stale' | 'approved-by-me' | 'all' | 'hidden';
+export type ReviewsViewId =
+  | 'act-now'
+  | 'waiting'
+  | 'snoozed'
+  | 'done-recently'
+  | 'needs-review'
+  | 'review-stale'
+  | 'approved-by-me'
+  | 'all'
+  | 'hidden';
 
 export type ViewId = MineViewId | ReviewsViewId;
 
@@ -45,6 +62,10 @@ interface ViewSpec {
 }
 
 const MINE_VIEWS: ViewSpec[] = [
+  { id: 'act-now', label: 'Act now', icon: BellRing, tone: 'text-warn' },
+  { id: 'waiting', label: 'Waiting', icon: Hourglass, tone: 'text-muted' },
+  { id: 'snoozed', label: 'Snoozed', icon: AlarmClock, tone: 'text-dim' },
+  { id: 'done-recently', label: 'Done recently', icon: History, tone: 'text-ready' },
   { id: 'all', label: 'Open', icon: Inbox, tone: 'text-muted' },
   {
     id: 'needs-attention',
@@ -79,6 +100,10 @@ const MINE_VIEWS: ViewSpec[] = [
 ];
 
 const REVIEWS_VIEWS: ViewSpec[] = [
+  { id: 'act-now', label: 'Act now', icon: BellRing, tone: 'text-warn' },
+  { id: 'waiting', label: 'Waiting', icon: Hourglass, tone: 'text-muted' },
+  { id: 'snoozed', label: 'Snoozed', icon: AlarmClock, tone: 'text-dim' },
+  { id: 'done-recently', label: 'Done recently', icon: History, tone: 'text-ready' },
   {
     id: 'needs-review',
     label: 'Needs your review',
@@ -108,8 +133,8 @@ export function viewsFor(mode: Mode): ViewSpec[] {
   return mode === 'reviews' ? REVIEWS_VIEWS : MINE_VIEWS;
 }
 
-export function defaultViewFor(mode: Mode): ViewId {
-  return mode === 'reviews' ? 'needs-review' : 'needs-attention';
+export function defaultViewFor(_mode: Mode): ViewId {
+  return 'act-now';
 }
 
 export function isViewFor(mode: Mode, id: string): id is ViewId {
@@ -138,16 +163,18 @@ export function countViews(
 }
 
 const ITEM_BASE =
-  'tap-safe flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors duration-instant ease-out lg:px-3';
-const ITEM_ON = 'bg-accent-wash text-accent';
-const ITEM_OFF = 'text-muted hover:bg-surface-hover hover:text-ink';
+  'tap-safe flex w-full items-center gap-2.5 overflow-hidden rounded-lg border px-2 py-2 text-sm transition-all duration-instant ease-out lg:px-3';
+const ITEM_ON = 'border-accent-border bg-accent-wash font-medium text-accent shadow-sm';
+const ITEM_OFF = 'border-transparent text-muted hover:border-line hover:bg-surface hover:text-ink';
 
 /**
  * Labels show on the mobile strip and on the wide rail. The 56px icon rail hides them.
  * Collapsing removes the `lg` reveal so the rail stays narrow at every width.
  */
 function labelVis(collapsed: boolean): string {
-  return collapsed ? 'hidden max-sm:inline' : 'hidden max-sm:inline lg:inline';
+  return collapsed
+    ? 'hidden transition-[max-width,opacity] duration-base ease-out max-sm:inline lg:block lg:max-w-0 lg:opacity-0'
+    : 'hidden transition-[max-width,opacity] duration-base ease-out max-sm:inline lg:block lg:max-w-[180px] lg:opacity-100';
 }
 function countVis(collapsed: boolean): string {
   return collapsed ? 'hidden max-sm:contents' : 'hidden max-sm:contents lg:contents';
@@ -164,10 +191,15 @@ function Count({ n, active }: { n: number; active: boolean }) {
 }
 
 function SectionLabel({ children, collapsed }: { children: React.ReactNode; collapsed: boolean }) {
-  if (collapsed) return <div className="hidden pt-3 sm:block" />;
   return (
-    <div className="hidden px-3 pb-1 pt-4 font-mono text-2xs uppercase tracking-[0.14em] text-dim lg:block">
-      {children}
+    <div className="hidden h-10 items-end px-3 pb-2 font-mono text-2xs uppercase tracking-[0.16em] text-dim sm:flex">
+      <span
+        className={`whitespace-nowrap transition-opacity duration-fast ease-out ${
+          collapsed ? 'opacity-0' : 'opacity-100'
+        }`}
+      >
+        {children}
+      </span>
     </div>
   );
 }
@@ -208,15 +240,15 @@ export function Rail({
   return (
     <nav
       aria-label="Views and repositories"
-      className={`sticky top-header z-chrome shrink-0 bg-canvas max-sm:w-full max-sm:border-b max-sm:border-line sm:h-[calc(100dvh-var(--header-height))] sm:overflow-y-auto sm:border-r sm:border-line sm:py-2 ${width}`}
+      className={`sticky top-header z-chrome shrink-0 bg-surface/55 backdrop-blur-sm transition-[width] duration-base ease-out max-sm:w-full max-sm:border-b max-sm:border-line sm:h-[calc(100dvh-var(--header-height))] sm:overflow-y-auto sm:border-r sm:border-line sm:py-3 ${width}`}
     >
-      <div className="hidden justify-end px-2 pt-1 lg:flex">
+      <div className="hidden h-9 items-center px-2 lg:flex">
         <button
           onClick={onToggleCollapsed}
           aria-expanded={!collapsed}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className="pointer-safe inline-flex items-center justify-center rounded-md p-1.5 text-dim transition-colors duration-instant ease-out hover:bg-surface-hover hover:text-ink"
+          className="pointer-safe ml-1.5 inline-flex items-center justify-center rounded-lg border border-transparent p-1.5 text-dim transition-all duration-instant ease-out hover:border-line hover:bg-surface hover:text-ink"
         >
           {collapsed ? (
             <PanelLeft aria-hidden strokeWidth={1.5} className="h-4 w-4" />
@@ -228,7 +260,7 @@ export function Rail({
 
       <SectionLabel collapsed={collapsed}>Views</SectionLabel>
 
-      <ul className="flex gap-0.5 px-2 max-sm:overflow-x-auto max-sm:py-2 sm:flex-col">
+      <ul className="flex gap-1 px-2 max-sm:overflow-x-auto max-sm:py-2 sm:flex-col">
         {views.map(({ id, label, icon: Icon, tone }) => {
           const active = activeView === id;
           const n = viewCounts[id] ?? 0;
@@ -258,10 +290,16 @@ export function Rail({
       </ul>
 
       {showRepos && (
-        <>
+        <div
+          className={`overflow-hidden transition-all duration-base ease-out ${
+            collapsed
+              ? 'sm:pointer-events-none sm:max-h-0 sm:opacity-0'
+              : 'sm:max-h-[2000px] sm:opacity-100'
+          }`}
+        >
           <SectionLabel collapsed={collapsed}>Repositories</SectionLabel>
 
-          <ul className="flex gap-0.5 px-2 max-sm:overflow-x-auto max-sm:pb-2 sm:flex-col sm:pb-4">
+          <ul className="flex gap-1 px-2 max-sm:overflow-x-auto max-sm:pb-2 sm:flex-col sm:pb-4">
             <li className="shrink-0">
               <button
                 onClick={() => onSelectRepo('all')}
@@ -301,7 +339,7 @@ export function Rail({
               );
             })}
           </ul>
-        </>
+        </div>
       )}
     </nav>
   );

@@ -21,6 +21,12 @@ Two modes. **Mine** is what you wrote and have not merged. **Reviews** is what o
 asked you to look at. Typical size is 18 in Mine and 11 in Reviews, across seven
 repositories.
 
+The default workflow is a personal queue: **Act now** contains work only the engineer can
+move, **Waiting** contains healthy background work, **Snoozed** holds deliberately deferred
+items, and **Done recently** queries GitHub for PRs closed or merged in the last seven days.
+Actions taken from the desk are added optimistically for five minutes while GitHub search catches
+up. Snoozes remain browser-local and are never written to GitHub.
+
 GitHub already does browsing, code review and writing comments better. This exists to find
 the blocked items faster than GitHub's own list, and to clear them without a page load.
 
@@ -38,7 +44,7 @@ Three tiers, all local. The browser never holds a GitHub token.
 Browser                    Next.js server                  GitHub
 ────────────────────────   ─────────────────────────────    ──────────────────────
 DashboardView              src/lib/cache.ts                 GraphQL
- filters, sort, expanded    Map<Mode, ModeState>             search(type: ISSUE)
+ filters, queue, inspector  Map<Mode, ModeState>             search(type: ISSUE)
  selection                  25s list TTL                     node(id) detail
 localStorage                5min per-PR activity TTL         10 mutations
  hidden, visited, theme    src/lib/events.ts                REST
@@ -83,14 +89,16 @@ the refresh button; and the 30s poll as the fallback that always works.
 
 ## 3. The frame
 
-- A sticky **56px header**: title, Mine/Reviews switch, search, sync dot and time, refresh,
+- A sticky **72px header**: title, Mine/Reviews switch, search, sync dot and time, refresh,
   theme toggle.
-- A **240px left rail**, collapsing to 56px. Views with live counts, then a repository
-  filter. Mine: Open, Needs you, Failing, Ready, In queue, Drafts, Hidden.
+- A **260px left rail**, collapsing to 68px. Views with live counts, then a repository
+  filter. The collapse keeps the toggle and view icons on fixed rows and hides the repository
+  section completely, so nothing shifts vertically. Mine: Open, Needs you, Failing, Ready, In
+  queue, Drafts, Hidden.
 - A filter bar: active-filter chips, a sort menu, a count, and Mark all seen.
 - **Blocked on you**, then **Everything else**. The split shows only on the unfiltered view;
   every other view is already a narrowing the split would fight.
-- A stack of cards, 12px apart.
+- A stack of cards, 16px apart.
 
 **Filters and sort live in the URL** (`view`, `repo`, `q`, `sort`), so the back button
 restores a filter set and a link carries one. Only non-default values are written. Picking a
@@ -148,11 +156,24 @@ primary. They live on the expanded toolbar, on the right, away from Hide. Both c
 A conflicted card shows **Resolve conflicts**, linking to GitHub's web editor. A queued card
 shows **View queue**. Otherwise a card with no action shows **Review**.
 
-### Expanded
+### Inspector
 
-Four tabs. A queued pull request opens on **Merge queue**; everything else opens on
-**Checks**. Description takes the full card width because prose needs it; Checks and Threads
-sit side by side from 1280px, and the tabs switch between them below that.
+Selecting a row opens a persistent right-side inspector without moving the queue. On desktop,
+the divider is resizable from 32–60% (while preserving at least 480px for the inspector), is
+keyboard adjustable, and remembers its width in the browser. Queue cards retain every summary
+field and reflow them onto additional rows as the master column narrows. The inspector shell is
+stable while navigating between PRs, avoiding a repeated entrance animation; opening and closing
+animate the grid tracks directly. Below the desktop breakpoint it becomes a bounded bottom drawer.
+A queued pull request opens on **Merge queue**; everything else opens on **Checks**. Description
+takes the full card width because prose needs it; Checks and Threads sit side by side when there is
+room.
+
+The inspector starts with a **Since you last looked** digest. GitHub timeline activity supplies
+new comments, reviews and commits; a browser-local snapshot adds check, review, mergeability and
+thread-count transitions. The snapshot is recorded only after the digest is computed.
+
+Keyboard controls operate the current queue: `J`/`K` move, `1`–`4` select inspector tabs, `G`
+opens GitHub, `S` snoozes, `H` hides, `R` refreshes, and `⌘K` or `?` opens the command palette.
 
 - **Description** — `bodyHTML`, GitHub's own rendered and sanitized markdown, so issue refs
   and mentions resolve against the repository. No markdown library, no extra request.
@@ -207,28 +228,29 @@ whenever two writes finished together.
 
 ## 6. Tokens
 
-Light carries the reference values and is the theme the app opens in. Dark is derived from the
-same ramps. Three states: no stamp means light, `[data-theme='dark']` and a
+Light uses warm editorial neutrals and a sparing coral accent inspired by Opensource UI, and is
+the theme the app opens in. Dark is derived from the same ramps. Three states: no stamp means
+light, `[data-theme='dark']` and a
 `prefers-color-scheme: dark` media query both give dark, and the toggle cycles light, dark,
 system.
 
 | Token | Light | Dark |
 |---|---|---|
-| `--bg` | `#f4f5f7` | `#0b0f19` |
-| `--surface` | `#ffffff` | `#111827` |
-| `--surface-raised` | `#ffffff` | `#161f2f` |
-| `--surface-hover` | `#f9fafb` | `#1a2333` |
-| `--surface-muted` | `#f3f4f6` | `#1f2937` |
-| `--border` | `#e5e7eb` | `#2a3546` |
-| `--border-subtle` | `#f0f1f3` | `#1e2836` |
-| `--border-strong` | `#d1d5db` | `#3a4759` |
-| `--border-control` | `#8a93a3` | `#6b7684` |
-| `--text` | `#111827` | `#f3f4f6` |
-| `--text-muted` | `#4b5563` | `#cbd2dc` |
-| `--text-dim` | `#6b7280` | `#9ca3af` |
-| `--text-faint` | `#9ca3af` | `#6b7280` |
-| `--accent` | `#2563eb` | `#60a5fa` |
-| `--accent-fill` | `#2563eb` | `#2563eb` |
+| `--bg` | `#f7f7f4` | `#141412` |
+| `--surface` | `#fffefa` | `#1c1c1a` |
+| `--surface-raised` | `#ffffff` | `#232320` |
+| `--surface-hover` | `#f7f6f1` | `#292925` |
+| `--surface-muted` | `#f1f0eb` | `#30302b` |
+| `--border` | `#e6e4de` | `#343430` |
+| `--border-subtle` | `#efede8` | `#2a2a27` |
+| `--border-strong` | `#d2cfc7` | `#4b4a44` |
+| `--border-control` | `#aaa69d` | `#706e66` |
+| `--text` | `#1d1d1b` | `#f4f2ec` |
+| `--text-muted` | `#575650` | `#cbc7bd` |
+| `--text-dim` | `#77746c` | `#9f9b91` |
+| `--text-faint` | `#aaa69e` | `#716e67` |
+| `--accent` | `#c92f4c` | `#ff8298` |
+| `--accent-fill` | `#242422` | `#f4f2ec` |
 | `--ready` | `#16a34a` | `#4ade80` |
 | `--ready-fill` | `#166534` | `#166534` |
 | `--warn` | `#b45309` | `#fbbf24` |
@@ -239,8 +261,8 @@ system.
 are for a filled control that carries white text. They differ because the pair has to pass
 contrast, not because the theme changed.
 
-**Geometry.** Radius 4 / 6 / 10. Space 4 / 8 / 12 / 16 / 24 / 32. Header 56px, rail 240px
-collapsing to 56px. Pointer target 24px, touch target 44px.
+**Geometry.** Radius 8 / 12 / 18. Space 4 / 8 / 12 / 16 / 24 / 32. Header 72px, rail 260px
+collapsing to 68px. Pointer target 24px, touch target 44px.
 
 **Type.** Inter at 400/500/600/700 for the interface, JetBrains Mono at 400/500/600 for
 numbers, branches and paths. Body 13px at 1.4. Scale: 11 / 12 / 13 / 14 / 16 / 20 / 28.
@@ -324,7 +346,7 @@ Not optional, and it has already changed decisions.
 - No hover-only path to information or to a control.
 - Status never carried by colour alone.
 - The card is not a `role="button"`. It holds links and buttons, and interactive content
-  inside a control is invalid. Click-to-expand is a mouse convenience; the chevron is the
+  inside a control is invalid. Click-to-inspect is a mouse convenience; the chevron is the
   accessible control.
 - Range select reads `shiftKey` from **click**, not change. A change event's `nativeEvent` is
   a plain `Event` and carries no modifier keys.

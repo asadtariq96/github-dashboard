@@ -33,10 +33,10 @@ import {
   type RowActionId,
 } from '../../lib/rowAction';
 import { blockedReason, getStatusRail, railBorders, railLabels } from '../../lib/status';
-import { CARD_SPRING, FADE_IN } from '../../lib/motion';
+import { EASE_OUT, FADE_IN } from '../../lib/motion';
 import { summarizeChecks } from '../../lib/checks';
 import { compactAge, longAge } from '../../lib/time';
-import { computeNew, recordVisit } from '../../lib/visited';
+import { computeNew, recordSnapshot, recordVisit } from '../../lib/visited';
 import { StatusChips } from './chips';
 import { ChecksPanel } from './ChecksPanel';
 import { ThreadsPanel } from './ThreadsPanel';
@@ -44,7 +44,7 @@ import { DescriptionPanel } from './DescriptionPanel';
 import { MergeQueuePanel } from './MergeQueuePanel';
 import { ActionButton, CountPill, DiffBar, DiffStat, SplitButton, type MenuItem } from './ui';
 
-type TabId = 'description' | 'queue' | 'checks' | 'threads';
+export type TabId = 'description' | 'queue' | 'checks' | 'threads';
 
 const TABS: { id: TabId; label: string; icon: typeof ListChecks }[] = [
   { id: 'description', label: 'Description', icon: FileText },
@@ -82,7 +82,7 @@ const REVERSE_TONE: Record<string, 'danger' | 'warn'> = {
 };
 
 const ICON_BUTTON =
-  'pointer-safe inline-flex shrink-0 items-center justify-center rounded-md p-1 text-dim transition-colors duration-instant ease-out hover:bg-surface-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
+  'pointer-safe inline-flex shrink-0 items-center justify-center rounded-full border border-line bg-surface-raised p-1.5 text-dim shadow-sm transition-all duration-instant ease-out hover:-translate-y-px hover:border-line-strong hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
 
 function PRStateIcon({ pr }: { pr: PullRequestAssessment }) {
   if (pr.isDraft) {
@@ -116,10 +116,12 @@ function PRStateIcon({ pr }: { pr: PullRequestAssessment }) {
   );
 }
 
-function TimePair({ pr }: { pr: PullRequestAssessment }) {
+function TimePair({ pr, force = false }: { pr: PullRequestAssessment; force?: boolean }) {
   const stale = Date.now() - new Date(pr.updatedAt).getTime() > 7 * 86400 * 1000;
   return (
-    <span className="hidden shrink-0 flex-col items-end text-2xs leading-tight text-dim 2xl:flex">
+    <span
+      className={`${force ? 'flex' : 'hidden 2xl:flex'} shrink-0 flex-col items-end text-2xs leading-tight text-dim`}
+    >
       <span title={`Opened ${longAge(pr.createdAt)}`}>Opened {compactAge(pr.createdAt)}</span>
       <span title={`Updated ${longAge(pr.updatedAt)}`} className={stale ? 'text-warn' : undefined}>
         Updated {compactAge(pr.updatedAt)}
@@ -142,7 +144,12 @@ export function PRCard({
   defaultTab,
   openFirstThread = false,
   selected = false,
+  inspected = false,
+  contained = false,
+  hideStats = false,
   onToggleSelect,
+  activeTab,
+  onTabChange,
 }: {
   pr: PullRequestAssessment;
   mode: Mode;
@@ -158,11 +165,26 @@ export function PRCard({
   defaultTab?: TabId;
   openFirstThread?: boolean;
   selected?: boolean;
+  /** Highlights the row currently shown in the desktop inspector. */
+  inspected?: boolean;
+  /** Reflows the complete summary when the card lives in the narrower master column. */
+  contained?: boolean;
+  /** Inspector headers trade duplicated summary stats for more title room. */
+  hideStats?: boolean;
   /** Shift held means select the range from the last one picked. */
   onToggleSelect?: (shiftKey: boolean) => void;
+  activeTab?: TabId;
+  onTabChange?: (tab: TabId) => void;
 }) {
   // A queued pull request opens on the queue, because that is what decides its fate.
-  const [tab, setTab] = useState<TabId>(defaultTab ?? (pr.isInMergeQueue ? 'queue' : 'checks'));
+  const [internalTab, setInternalTab] = useState<TabId>(
+    defaultTab ?? (pr.isInMergeQueue ? 'queue' : 'checks'),
+  );
+  const tab = activeTab ?? internalTab;
+  const setTab = (next: TabId) => {
+    setInternalTab(next);
+    onTabChange?.(next);
+  };
 
   const prKey = `${pr.repository.nameWithOwner}#${pr.number}`;
   const newActivity = computeNew(activity, prKey);
@@ -177,10 +199,12 @@ export function PRCard({
   const secondary = actions.slice(1);
   const reverse = onRunAction ? reverseActionsFor(pr) : [];
 
-  const visit = () => recordVisit(prKey);
+  const visit = () => {
+    recordVisit(prKey);
+    recordSnapshot(prKey, pr);
+  };
 
   const handleToggle = () => {
-    if (!isExpanded) visit();
     onToggleExpand();
   };
 
@@ -196,20 +220,28 @@ export function PRCard({
   return (
     <article
       aria-selected={onToggleSelect ? selected : undefined}
-      className={`overflow-hidden rounded-lg border bg-surface shadow-sm transition-colors duration-instant ease-out ${
+      className={`overflow-hidden rounded-lg border bg-surface shadow-sm transition-all duration-fast ease-out ${
         selected
-          ? 'border-accent ring-1 ring-accent'
-          : isExpanded
-            ? 'border-line-strong'
-            : 'border-line'
+          ? 'border-accent ring-2 ring-accent/20'
+          : inspected
+            ? 'border-accent-border bg-accent-wash/30 ring-2 ring-accent/10'
+            : isExpanded
+              ? 'border-line-strong shadow-md'
+              : 'border-line hover:border-line-strong hover:shadow-md'
       }`}
     >
       <div title={railLabels[rail]} className={`border-l-[3px] ${railBorders[rail]}`}>
         <div
           onClick={handleToggle}
-          className="flex cursor-pointer select-none items-center gap-4 px-4 py-3 transition-colors duration-instant ease-out hover:bg-surface-hover"
+          className={`flex cursor-pointer select-none items-center gap-4 px-5 py-4 transition-colors duration-instant ease-out hover:bg-surface-hover ${
+            contained ? 'flex-wrap gap-y-3' : ''
+          }`}
         >
-          <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div
+            className={`flex min-w-0 items-center gap-3 ${
+              contained ? 'flex-[1_1_720px]' : 'flex-1'
+            }`}
+          >
             {onToggleSelect && (
               /*
                * The handler is on click, not change. A change event's nativeEvent is a
@@ -266,13 +298,13 @@ export function PRCard({
                     e.stopPropagation();
                     visit();
                   }}
-                  className={`truncate text-base hover:text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${
+                  className={`truncate text-[15px] tracking-[-0.01em] hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${
                     newActivity.count > 0 ? 'font-bold text-ink' : 'font-semibold text-ink'
                   }`}
                 >
                   {pr.title}
                 </a>
-                <span className="shrink-0 rounded-sm border border-line bg-surface-muted px-1.5 font-mono text-2xs font-medium tabular text-muted">
+                <span className="shrink-0 rounded-full border border-line bg-surface-muted px-2 py-0.5 font-mono text-2xs font-medium tabular text-muted">
                   #{pr.number}
                 </span>
               </div>
@@ -284,7 +316,7 @@ export function PRCard({
                   &bull;
                 </span>
                 <GitBranch aria-hidden strokeWidth={2} className="h-[13px] w-[13px] shrink-0" />
-                <span className="truncate rounded-sm bg-surface-muted px-1 font-mono text-2xs text-muted">
+                <span className="truncate rounded-full bg-surface-muted px-1.5 font-mono text-2xs text-muted">
                   {pr.headRefName}
                 </span>
                 <ArrowRight
@@ -292,14 +324,20 @@ export function PRCard({
                   strokeWidth={2}
                   className="h-[13px] w-[13px] shrink-0 text-faint"
                 />
-                <span className="shrink-0 rounded-sm bg-surface-muted px-1 font-mono text-2xs text-muted">
+                <span className="shrink-0 rounded-full bg-surface-muted px-1.5 font-mono text-2xs text-muted">
                   {pr.baseRefName}
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="hidden shrink-0 items-center gap-2 lg:flex">
+          <div
+            className={`${
+              hideStats ? 'hidden' : contained ? 'flex' : 'hidden lg:flex'
+            } min-w-0 flex-wrap items-center gap-2 ${
+              contained ? 'max-w-full flex-none justify-end' : 'shrink-0'
+            }`}
+          >
             {pr.additions + pr.deletions > 0 && (
               <span
                 title={`${pr.additions} additions, ${pr.deletions} deletions across ${pr.changedFiles} files`}
@@ -312,8 +350,11 @@ export function PRCard({
             <StatusChips pr={pr} />
           </div>
 
-          <div onClick={(e) => e.stopPropagation()} className="flex shrink-0 items-center gap-2.5">
-            <TimePair pr={pr} />
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`${contained ? 'ml-auto flex-wrap' : ''} flex shrink-0 items-center gap-2.5`}
+          >
+            <TimePair pr={pr} force={contained} />
 
             {newActivity.count > 0 && (
               <span
@@ -377,22 +418,21 @@ export function PRCard({
           </div>
         </div>
 
-        {/*
-            The card's growth is carried by the layout animation on the list item, so the
-            body only fades. Nothing animates height, which would force layout on every
-            card in the list.
-          */}
+        {/* Motion owns the accordion reveal; the list only moves the surrounding rows. */}
         <AnimatePresence initial={false}>
           {isExpanded && (
             <motion.div
               key="body"
-              layout
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ layout: CARD_SPRING, opacity: FADE_IN }}
+              className="overflow-hidden"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{
+                height: { duration: 0.28, ease: EASE_OUT },
+                opacity: FADE_IN,
+              }}
             >
-              <div className="flex flex-wrap items-center gap-2 border-y border-line bg-surface-hover px-4">
+              <div className="flex flex-wrap items-center gap-2 border-y border-line bg-surface-hover px-5">
                 <div
                   role="tablist"
                   aria-label={`Detail for pull request ${pr.number}`}

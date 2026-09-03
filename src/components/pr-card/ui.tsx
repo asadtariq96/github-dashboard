@@ -109,7 +109,7 @@ export function CountPill({
 }
 
 const CHIP_TONE = {
-  neutral: 'border-line bg-surface text-muted',
+  neutral: 'border-line bg-surface-raised text-muted',
   danger: 'border-danger-border bg-danger-wash font-semibold text-danger',
   warn: 'border-warn/40 bg-warn-wash font-semibold text-warn',
   queue: 'border-queue/40 bg-queue-wash font-semibold text-queue',
@@ -132,7 +132,7 @@ export function Chip({
   return (
     <span
       title={title}
-      className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-[3px] text-xs font-medium ${CHIP_TONE[tone]}`}
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium shadow-sm ${CHIP_TONE[tone]}`}
     >
       {Icon && (
         <Icon aria-hidden strokeWidth={2} className={`h-[14px] w-[14px] shrink-0 ${iconClass}`} />
@@ -143,7 +143,7 @@ export function Chip({
 }
 
 const BUTTON_BASE =
-  'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md text-xs font-medium transition-colors duration-instant ease-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-45';
+  'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg text-xs font-medium shadow-sm transition-all duration-instant ease-out hover:-translate-y-px focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0';
 
 const BUTTON_TONE = {
   outline: 'border border-line bg-surface text-muted hover:bg-surface-muted hover:text-ink',
@@ -176,7 +176,7 @@ export function ActionButton({
   trailingChevron?: boolean;
   title?: string;
 }) {
-  const className = `${BUTTON_BASE} ${BUTTON_TONE[tone]} pointer-safe tap-safe px-2.5 py-1.5`;
+  const className = `${BUTTON_BASE} ${BUTTON_TONE[tone]} pointer-safe tap-safe px-3 py-2`;
   const inner = (
     <>
       {busy ? (
@@ -371,12 +371,14 @@ export function SplitButton({
   const fill = SPLIT_FILL[tone];
 
   return (
-    <span className={`inline-flex shrink-0 overflow-hidden rounded-md shadow-sm ${fill}`}>
+    <span
+      className={`inline-flex shrink-0 overflow-hidden rounded-lg border border-black/10 shadow-md transition-transform duration-instant ease-out hover:-translate-y-px ${fill}`}
+    >
       <button
         type="button"
         onClick={onClick}
         disabled={busy}
-        className="tap-safe inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-accent-on transition-colors duration-instant ease-out focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-on disabled:opacity-60"
+        className="tap-safe inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-accent-on transition-colors duration-instant ease-out focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-on disabled:opacity-60"
       >
         {busy ? (
           <Loader2 aria-hidden className="h-[14px] w-[14px] animate-spin" />

@@ -34,10 +34,14 @@ export function ModeSwitch({ mode, activeCount, otherAgeMs }: ModeSwitchProps) {
   const other = OTHER[mode];
 
   return (
-    <div className="flex items-center gap-1" role="group" aria-label="Pull request mode">
+    <div
+      className="flex items-center gap-1 rounded-lg border border-line bg-surface-muted p-1"
+      role="group"
+      aria-label="Pull request mode"
+    >
       <span
         aria-current="page"
-        className="inline-flex items-center gap-2 rounded-md bg-accent-wash px-2.5 py-1.5 text-sm font-medium text-accent"
+        className="inline-flex items-center gap-2 rounded-md bg-surface-raised px-2.5 py-1.5 text-sm font-medium text-ink shadow-sm"
       >
         {HERE[mode]}
         <span className="font-mono text-2xs tabular">{activeCount}</span>
@@ -45,7 +49,7 @@ export function ModeSwitch({ mode, activeCount, otherAgeMs }: ModeSwitchProps) {
 
       <Link
         href={other.href}
-        className="tap-safe inline-flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-muted transition-colors duration-instant ease-out hover:bg-surface-hover hover:text-ink"
+        className="tap-safe inline-flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-muted transition-colors duration-instant ease-out hover:bg-surface-raised hover:text-ink"
         title={`${other.label}, checked ${formatAge(otherAgeMs)}`}
       >
         {other.label}

@@ -58,6 +58,15 @@ export function getQueryKey(mode: Mode): string {
   return getSearchQueries(mode).join(' | ');
 }
 
+/** Lightweight history query. Review requests disappear when a PR closes, so review history
+ * is necessarily based on PRs the viewer actually reviewed. */
+export function getRecentSearchQueries(mode: Mode, since: string): string[] {
+  if (mode === 'reviews') {
+    return [`is:pr is:closed -author:@me reviewed-by:@me closed:>=${since} sort:updated-desc`];
+  }
+  return [`is:pr is:closed author:@me closed:>=${since} sort:updated-desc`];
+}
+
 /**
  * The list query nests check runs and review threads, so GitHub times out well before
  * 50 nodes — measured 502s starting at 15 for an account with heavy PRs, stable at 10.

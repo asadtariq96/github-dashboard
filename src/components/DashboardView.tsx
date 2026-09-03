@@ -17,6 +17,16 @@ import { SortMenu } from './SortMenu';
 import { FilterChips, type FilterChip } from './FilterChips';
 import { computeNew, markAllSeen } from '../lib/visited';
 import {
+  getRecentCompletions,
+  getSnoozed,
+  isSnoozed,
+  needsAction,
+  recordCompletion,
+  saveSnoozed,
+  type RecentCompletion,
+  type SnoozeMap,
+} from '../lib/workQueue';
+import {
   Rail,
   countViews,
   defaultViewFor,
@@ -25,7 +35,7 @@ import {
   viewsFor,
   type ViewId,
 } from './Rail';
-import { RefreshCw, Search, AlertCircle } from 'lucide-react';
+import { RefreshCw, Search, AlertCircle, CheckCircle2, ExternalLink } from 'lucide-react';
 
 const URL_WRITE_DEBOUNCE_MS = 300;
 
@@ -53,6 +63,13 @@ export function DashboardView({ mode }: { mode: Mode }) {
   const [busy, setBusy] = useState<Record<string, RowActionId>>({});
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [selectedPRIds, setSelectedPRIds] = useState<Set<string>>(new Set());
+  /**
+   * GitHub search is eventually consistent after a close. Keep successfully closed PRs
+   * off the desk until a refresh confirms the search result has caught up.
+   */
+  const [removedPRIds, setRemovedPRIds] = useState<Set<string>>(new Set());
+  const [snoozedUntil, setSnoozedUntil] = useState<SnoozeMap>({});
+  const [recentCompletions, setRecentCompletions] = useState<RecentCompletion[]>([]);
   const [batchRunning, setBatchRunning] = useState<RowActionId | null>(null);
   /** Anchor for a shift-click range. */
   const lastPickedId = useRef<string | null>(null);
@@ -68,6 +85,8 @@ export function DashboardView({ mode }: { mode: Mode }) {
       }
 
       if (localStorage.getItem(RAIL_COLLAPSED_STORAGE_KEY) === '1') setRailCollapsed(true);
+      setSnoozedUntil(getSnoozed());
+      setRecentCompletions(getRecentCompletions());
     } catch (e) {
       console.warn('Failed to read preferences from localStorage:', e);
     }
@@ -168,6 +187,25 @@ export function DashboardView({ mode }: { mode: Mode }) {
     });
   };
 
+  const handleSnooze = (pr: PullRequestAssessment, until: number | null) => {
+    setSnoozedUntil((current) => {
+      const next = { ...current };
+      if (until) next[pr.id] = until;
+      else delete next[pr.id];
+      saveSnoozed(next);
+      return next;
+    });
+    toast.success(
+      until
+        ? `Snoozed #${pr.number} until ${new Date(until).toLocaleDateString([], {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+          })}`
+        : `Woke #${pr.number}`,
+    );
+  };
+
   /** Each action names its endpoint, its body, and what it says when it lands. */
   const ACTION_CALLS: Record<
     RowActionId,
@@ -231,6 +269,18 @@ export function DashboardView({ mode }: { mode: Mode }) {
     setBusy((current) => ({ ...current, [pr.id]: id }));
     try {
       await post(call.url, call.body);
+      if (id === 'close' || (id === 'merge' && !pr.hasRepoMergeQueue)) {
+        setRecentCompletions(recordCompletion(pr, id === 'merge' ? 'Merged' : 'Closed'));
+      }
+      if (id === 'close') {
+        setRemovedPRIds((current) => new Set(current).add(pr.id));
+        setSelectedPRIds((current) => {
+          if (!current.has(pr.id)) return current;
+          const next = new Set(current);
+          next.delete(pr.id);
+          return next;
+        });
+      }
       // Mark ready is the only one of these GitHub can actually reverse.
       toast.success(call.done, {
         action:
@@ -251,7 +301,10 @@ export function DashboardView({ mode }: { mode: Mode }) {
               }
             : undefined,
       });
-      await fetchDashboardState(true);
+      // The mutation response is authoritative. Close the confirmation/inspector in the
+      // same render as the success toast; refreshing the rest of the dashboard is follow-up
+      // reconciliation and must not keep the pre-mutation UI on screen.
+      void fetchDashboardState(true);
     } catch (err: any) {
       toast.error(`#${pr.number}: ${err.message}`);
     } finally {
@@ -304,6 +357,12 @@ export function DashboardView({ mode }: { mode: Mode }) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json: DashboardSyncResponse = await res.json();
       setData(json);
+      setRemovedPRIds((current) => {
+        if (current.size === 0) return current;
+        const returnedIds = new Set(json.prs.map((pr) => pr.id));
+        const next = new Set(Array.from(current).filter((id) => returnedIds.has(id)));
+        return next.size === current.size ? current : next;
+      });
       setError(json.error || null);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch dashboard state');
@@ -330,7 +389,10 @@ export function DashboardView({ mode }: { mode: Mode }) {
     };
   }, [mode]);
 
-  const prs = data?.prs || [];
+  const prs = useMemo(
+    () => (data?.prs || []).filter((pr) => !removedPRIds.has(pr.id)),
+    [data?.prs, removedPRIds],
+  );
 
   const repositories = useMemo(() => {
     const set = new Set<string>();
@@ -351,11 +413,24 @@ export function DashboardView({ mode }: { mode: Mode }) {
   const filteredPRs = useMemo(() => {
     const list = prs.filter((pr) => {
       const isHidden = hiddenPRIds.has(pr.id);
+      const snoozed = isSnoozed(snoozedUntil, pr.id);
       if (activeView === 'hidden') {
         if (!isHidden) return false;
       } else {
         if (isHidden) return false;
-        if (!matchesView(mode, activeView, pr)) return false;
+        if (activeView === 'snoozed') {
+          if (!snoozed) return false;
+        } else {
+          if (snoozed || activeView === 'done-recently') return false;
+          if (activeView === 'act-now' && !needsAction(mode, pr)) return false;
+          if (activeView === 'waiting' && needsAction(mode, pr)) return false;
+          if (
+            activeView !== 'act-now' &&
+            activeView !== 'waiting' &&
+            !matchesView(mode, activeView, pr)
+          )
+            return false;
+        }
       }
       if (selectedRepo !== 'all' && pr.repository.nameWithOwner !== selectedRepo) return false;
       if (searchQuery.trim() !== '') {
@@ -373,7 +448,17 @@ export function DashboardView({ mode }: { mode: Mode }) {
     });
 
     return list.sort(makeComparator(mode, sortId, unreadOf));
-  }, [prs, mode, activeView, selectedRepo, searchQuery, sortId, hiddenPRIds, unreadOf]);
+  }, [
+    prs,
+    mode,
+    activeView,
+    selectedRepo,
+    searchQuery,
+    sortId,
+    hiddenPRIds,
+    snoozedUntil,
+    unreadOf,
+  ]);
 
   /**
    * The priority zone only appears on the unfiltered view. Every other view either is
@@ -559,7 +644,7 @@ export function DashboardView({ mode }: { mode: Mode }) {
     setSeenVersion((v) => v + 1);
   };
 
-  const showZone = activeView === 'all';
+  const showZone = false;
   const zonePRs = useMemo(
     () => (showZone ? filteredPRs.filter((pr) => isBlocked(mode, pr)) : []),
     [showZone, filteredPRs, mode],
@@ -575,10 +660,50 @@ export function DashboardView({ mode }: { mode: Mode }) {
     [prs, hiddenPRIds],
   );
 
-  const viewCounts = useMemo(
-    () => countViews(mode, visiblePRs, hiddenCount),
-    [mode, visiblePRs, hiddenCount],
-  );
+  const doneRecently = useMemo<RecentCompletion[]>(() => {
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const optimisticCutoff = Date.now() - 5 * 60 * 1000;
+    const confirmedIds = new Set((data?.recentPRs || []).map((item) => item.id));
+    const byId = new Map(
+      recentCompletions
+        .filter(
+          (item) =>
+            item.completedAt >= cutoff &&
+            (item.completedAt >= optimisticCutoff || confirmedIds.has(item.id)),
+        )
+        .map((item) => [item.id, item] as const),
+    );
+    for (const item of data?.recentPRs || []) {
+      const completedAt = new Date(item.completedAt).getTime();
+      if (completedAt < cutoff) continue;
+      byId.set(item.id, { ...item, completedAt });
+    }
+    return Array.from(byId.values()).sort((a, b) => b.completedAt - a.completedAt);
+  }, [data?.recentPRs, recentCompletions]);
+
+  const shownDoneRecently = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return doneRecently.filter((item) => {
+      if (selectedRepo !== 'all' && item.repository !== selectedRepo) return false;
+      if (!q) return true;
+      return (
+        item.title.toLowerCase().includes(q) ||
+        item.repository.toLowerCase().includes(q) ||
+        item.number.toString().includes(q)
+      );
+    });
+  }, [doneRecently, searchQuery, selectedRepo]);
+
+  const viewCounts = useMemo(() => {
+    const counts = countViews(mode, visiblePRs, hiddenCount);
+    const awake = visiblePRs.filter((pr) => !isSnoozed(snoozedUntil, pr.id));
+    counts.all = awake.length;
+    counts['act-now'] = awake.filter((pr) => needsAction(mode, pr)).length;
+    counts.waiting = awake.filter((pr) => !needsAction(mode, pr)).length;
+    counts.snoozed = visiblePRs.filter((pr) => isSnoozed(snoozedUntil, pr.id)).length;
+    counts['done-recently'] = doneRecently.length;
+    return counts;
+  }, [mode, visiblePRs, hiddenCount, snoozedUntil, doneRecently.length]);
 
   const repoCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -588,6 +713,39 @@ export function DashboardView({ mode }: { mode: Mode }) {
     }
     return counts;
   }, [visiblePRs]);
+
+  const selectedRepoSummary = useMemo(() => {
+    if (selectedRepo === 'all') return null;
+    const repoPRs = prs.filter((pr) => pr.repository.nameWithOwner === selectedRepo);
+    const hidden = repoPRs.filter((pr) => hiddenPRIds.has(pr.id));
+    const snoozed = repoPRs.filter(
+      (pr) => !hiddenPRIds.has(pr.id) && isSnoozed(snoozedUntil, pr.id),
+    );
+    return {
+      shortName: selectedRepo.split('/')[1] ?? selectedRepo,
+      visibleCount: repoPRs.length - hidden.length,
+      hidden,
+      snoozedCount: snoozed.length,
+    };
+  }, [prs, selectedRepo, hiddenPRIds, snoozedUntil]);
+
+  const unhideSelectedRepo = () => {
+    if (!selectedRepoSummary?.hidden.length) return;
+    const ids = new Set(selectedRepoSummary.hidden.map((pr) => pr.id));
+    setHiddenPRIds((current) => {
+      const next = new Set(current);
+      ids.forEach((id) => next.delete(id));
+      try {
+        localStorage.setItem(HIDDEN_PRS_STORAGE_KEY, JSON.stringify(Array.from(next)));
+      } catch (e) {
+        console.warn('Failed to save hidden PRs to localStorage:', e);
+      }
+      return next;
+    });
+    toast.success(
+      `Unhid ${ids.size} pull request${ids.size === 1 ? '' : 's'} in ${selectedRepoSummary.shortName}`,
+    );
+  };
 
   const clearAllFilters = () => {
     setSelectedRepo('all');
@@ -648,6 +806,8 @@ export function DashboardView({ mode }: { mode: Mode }) {
     onRefresh: () => fetchDashboardState(true),
     selectedPRIds,
     onToggleSelect: handleToggleSelect,
+    snoozedUntil,
+    onSnooze: handleSnooze,
   };
 
   const selectedPRs = useMemo(
@@ -657,12 +817,21 @@ export function DashboardView({ mode }: { mode: Mode }) {
 
   return (
     <div className="min-h-dvh">
-      <header className="sticky top-0 z-chrome flex h-header items-center gap-3 border-b border-line bg-canvas px-3 sm:px-4">
-        <h1 className="shrink-0 text-base font-semibold tracking-tight text-ink">PR Desk</h1>
+      <header className="sticky top-0 z-chrome flex h-header items-center gap-3 border-b border-line/80 bg-surface/90 px-4 backdrop-blur-xl sm:px-6">
+        <div className="flex shrink-0 items-center gap-2.5">
+          <span aria-hidden className="relative block h-5 w-5 text-accent">
+            <span className="absolute left-1/2 top-0 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-current" />
+            <span className="absolute left-0 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-current" />
+            <span className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-current" />
+            <span className="absolute right-0 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-current" />
+            <span className="absolute bottom-0 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-current" />
+          </span>
+          <h1 className="font-display text-xl tracking-tight text-ink">PR Desk</h1>
+        </div>
 
         <ModeSwitch mode={mode} activeCount={totalCount} otherAgeMs={otherAgeMs} />
 
-        <div className="relative ml-auto hidden min-w-0 max-w-xs flex-1 sm:block">
+        <div className="relative ml-auto hidden min-w-0 max-w-sm flex-1 sm:block">
           <Search
             aria-hidden
             className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-dim"
@@ -673,7 +842,7 @@ export function DashboardView({ mode }: { mode: Mode }) {
             aria-label="Search pull requests"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-md border border-line-control bg-surface py-1.5 pl-8 pr-2 text-sm text-ink placeholder:text-dim focus:border-accent focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+            className="w-full rounded-lg border border-line bg-surface-raised py-2 pl-9 pr-3 text-sm text-ink shadow-sm placeholder:text-dim focus:border-line-strong focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
           />
         </div>
 
@@ -702,7 +871,7 @@ export function DashboardView({ mode }: { mode: Mode }) {
               ? `Working on ${busyCount} pull request${busyCount === 1 ? '' : 's'}…`
               : 'Refresh'
           }
-          className="tap-safe shrink-0 rounded-md border border-line bg-surface p-2 text-muted transition-colors duration-instant ease-out hover:border-line-strong hover:text-ink disabled:opacity-50"
+          className="tap-safe shrink-0 rounded-lg border border-line bg-surface-raised p-2 text-muted shadow-sm transition-all duration-instant ease-out hover:-translate-y-px hover:border-line-strong hover:text-ink disabled:opacity-50"
         >
           <RefreshCw
             aria-hidden
@@ -728,7 +897,22 @@ export function DashboardView({ mode }: { mode: Mode }) {
           onSelectRepo={setSelectedRepo}
         />
 
-        <main className="min-w-0 flex-1 px-3 py-4 sm:px-4">
+        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="mb-1.5 font-mono text-2xs uppercase tracking-[0.16em] text-dim">
+                {mode === 'mine' ? 'Your workspace' : 'Review inbox'}
+              </p>
+              <h2 className="font-display text-2xl capitalize tracking-tight text-ink sm:text-[34px] sm:leading-none">
+                {activeViewLabel}
+              </h2>
+            </div>
+            <p className="max-w-md text-sm leading-relaxed text-muted">
+              {mode === 'mine'
+                ? 'A focused view of what is moving, blocked, or ready to ship.'
+                : 'Requests that need a thoughtful pass before they can move forward.'}
+            </p>
+          </div>
           {error && (
             <div
               role="alert"
@@ -758,7 +942,7 @@ export function DashboardView({ mode }: { mode: Mode }) {
             </div>
           )}
 
-          <div className="mb-3 flex flex-wrap items-center gap-2">
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface/75 p-2 shadow-sm backdrop-blur-sm">
             <div className="relative min-w-0 flex-1 sm:hidden">
               <Search
                 aria-hidden
@@ -774,7 +958,9 @@ export function DashboardView({ mode }: { mode: Mode }) {
               />
             </div>
 
-            <span className="font-mono text-xs tabular text-dim">{filteredPRs.length} shown</span>
+            <span className="px-1.5 font-mono text-xs tabular text-dim">
+              {activeView === 'done-recently' ? shownDoneRecently.length : filteredPRs.length} shown
+            </span>
 
             {unreadTotal > 0 && (
               <button
@@ -785,9 +971,11 @@ export function DashboardView({ mode }: { mode: Mode }) {
               </button>
             )}
 
-            <div className="ml-auto flex items-center gap-2">
-              <SortMenu value={sortId} onChange={setSortId} />
-            </div>
+            {activeView !== 'done-recently' && (
+              <div className="ml-auto flex items-center gap-2">
+                <SortMenu value={sortId} onChange={setSortId} />
+              </div>
+            )}
           </div>
 
           {activeChips.length > 0 && (
@@ -803,47 +991,166 @@ export function DashboardView({ mode }: { mode: Mode }) {
             </div>
           ) : (
             <>
-              {zonePRs.length > 0 && (
-                <section aria-labelledby="zone-heading" className="mb-6">
-                  <h2
-                    id="zone-heading"
-                    className="mb-2 flex items-center gap-2 font-mono text-2xs uppercase tracking-[0.14em] text-warn"
-                  >
-                    <span aria-hidden className="h-2.5 w-0.5 rounded-full bg-warn" />
-                    Blocked on you
-                    <span className="tabular text-dim">{zonePRs.length}</span>
-                  </h2>
-                  <PRCardList prs={zonePRs} {...listProps} />
-                </section>
-              )}
-
-              {restPRs.length > 0 && showZone && zonePRs.length > 0 && (
-                <h2 className="mb-2 flex items-center gap-2 font-mono text-2xs uppercase tracking-[0.14em] text-dim">
-                  Everything else
-                  <span className="tabular">{restPRs.length}</span>
-                </h2>
-              )}
-
-              {restPRs.length === 0 && zonePRs.length === 0 ? (
-                <div className="rounded-md border border-line bg-surface px-6 py-16 text-center">
-                  <p className="text-sm text-muted">Nothing in {activeViewLabel}.</p>
-                  {activeChips.length > 0 && (
-                    <>
-                      <p className="mt-1 text-sm text-dim">
-                        {filterSummary} {activeChips.length === 1 ? 'is' : 'are'} still on.
-                      </p>
-                      <button
-                        onClick={clearAllFilters}
-                        className="tap-safe mt-3 rounded-md border border-line-control bg-surface px-3 py-1.5 text-sm text-muted transition-colors duration-instant ease-out hover:text-ink"
+              {activeView === 'done-recently' ? (
+                shownDoneRecently.length > 0 ? (
+                  <ul className="flex flex-col gap-3">
+                    {shownDoneRecently.map((item) => (
+                      <li
+                        key={`${item.id}-${item.completedAt}`}
+                        className="flex items-center gap-4 rounded-lg border border-line bg-surface px-5 py-4 shadow-sm"
                       >
-                        Clear{' '}
-                        {activeChips.length === 1 ? activeChips[0].label.toLowerCase() : 'filters'}
-                      </button>
-                    </>
-                  )}
-                </div>
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ready-wash text-ready">
+                          <CheckCircle2 aria-hidden className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <a
+                            href={item.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-semibold text-ink hover:text-accent"
+                          >
+                            {item.title}
+                          </a>
+                          <p className="mt-0.5 text-xs text-dim">
+                            {item.repository} · #{item.number} · {item.outcome}{' '}
+                            {new Date(item.completedAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <a
+                          href={item.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`Open pull request ${item.number} on GitHub`}
+                          className="rounded-full border border-line bg-surface-raised p-2 text-dim hover:text-ink"
+                        >
+                          <ExternalLink aria-hidden className="h-4 w-4" />
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="rounded-lg border border-line bg-surface px-6 py-16 text-center">
+                    <CheckCircle2 aria-hidden className="mx-auto h-6 w-6 text-ready" />
+                    <p className="mt-3 text-sm text-muted">
+                      {doneRecently.length > 0
+                        ? 'No completed pull requests match these filters.'
+                        : 'Nothing completed in the last 7 days.'}
+                    </p>
+                    <p className="mt-1 text-xs text-dim">
+                      {doneRecently.length > 0
+                        ? 'Clear the active search or repository filter to see the full history.'
+                        : 'Recently merged and closed pull requests from GitHub will appear here.'}
+                    </p>
+                  </div>
+                )
               ) : (
-                <PRCardList prs={restPRs} {...listProps} />
+                <>
+                  {zonePRs.length > 0 && (
+                    <section aria-labelledby="zone-heading" className="mb-8">
+                      <h2
+                        id="zone-heading"
+                        className="mb-2 flex items-center gap-2 font-mono text-2xs uppercase tracking-[0.14em] text-warn"
+                      >
+                        <span aria-hidden className="h-2.5 w-0.5 rounded-full bg-warn" />
+                        Blocked on you
+                        <span className="tabular text-dim">{zonePRs.length}</span>
+                      </h2>
+                      <PRCardList prs={zonePRs} {...listProps} />
+                    </section>
+                  )}
+
+                  {restPRs.length > 0 && showZone && zonePRs.length > 0 && (
+                    <h2 className="mb-2 flex items-center gap-2 font-mono text-2xs uppercase tracking-[0.14em] text-dim">
+                      Everything else
+                      <span className="tabular">{restPRs.length}</span>
+                    </h2>
+                  )}
+
+                  {restPRs.length === 0 && zonePRs.length === 0 ? (
+                    <div className="rounded-md border border-line bg-surface px-6 py-16 text-center">
+                      <p className="text-sm text-muted">Nothing in {activeViewLabel}.</p>
+                      {selectedRepoSummary && selectedRepoSummary.hidden.length > 0 && (
+                        <div className="mt-3">
+                          <p className="text-sm text-dim">
+                            {selectedRepoSummary.hidden.length}{' '}
+                            {selectedRepoSummary.hidden.length === 1
+                              ? 'pull request is'
+                              : 'pull requests are'}{' '}
+                            hidden in {selectedRepoSummary.shortName}.
+                          </p>
+                          <button
+                            onClick={unhideSelectedRepo}
+                            className="tap-safe mt-3 rounded-md border border-line-control bg-surface-raised px-3 py-1.5 text-sm font-medium text-ink shadow-sm transition-colors duration-instant ease-out hover:border-line-strong"
+                          >
+                            Unhide {selectedRepoSummary.hidden.length}{' '}
+                            {selectedRepoSummary.hidden.length === 1 ? 'PR' : 'PRs'}
+                          </button>
+                        </div>
+                      )}
+                      {selectedRepoSummary &&
+                        selectedRepoSummary.visibleCount > 0 &&
+                        selectedRepoSummary.snoozedCount === selectedRepoSummary.visibleCount &&
+                        activeView !== 'snoozed' &&
+                        searchQuery.trim() === '' && (
+                          <div className="mt-3">
+                            <p className="text-sm text-dim">
+                              {selectedRepoSummary.snoozedCount}{' '}
+                              {selectedRepoSummary.snoozedCount === 1
+                                ? 'open pull request is'
+                                : 'open pull requests are'}{' '}
+                              snoozed in {selectedRepoSummary.shortName}.
+                            </p>
+                            <button
+                              onClick={() => setActiveView('snoozed')}
+                              className="tap-safe mt-3 rounded-md border border-line-control bg-surface-raised px-3 py-1.5 text-sm font-medium text-ink shadow-sm transition-colors duration-instant ease-out hover:border-line-strong"
+                            >
+                              View snoozed PRs
+                            </button>
+                          </div>
+                        )}
+                      {selectedRepoSummary &&
+                        selectedRepoSummary.visibleCount > 0 &&
+                        selectedRepoSummary.snoozedCount !== selectedRepoSummary.visibleCount &&
+                        activeView !== 'all' &&
+                        searchQuery.trim() === '' && (
+                          <div className="mt-3">
+                            <p className="text-sm text-dim">
+                              {selectedRepoSummary.visibleCount}{' '}
+                              {selectedRepoSummary.visibleCount === 1
+                                ? 'open pull request exists'
+                                : 'open pull requests exist'}{' '}
+                              in {selectedRepoSummary.shortName}, but none appear in{' '}
+                              {activeViewLabel}.
+                            </p>
+                            <button
+                              onClick={() => setActiveView('all')}
+                              className="tap-safe mt-3 rounded-md border border-line-control bg-surface-raised px-3 py-1.5 text-sm font-medium text-ink shadow-sm transition-colors duration-instant ease-out hover:border-line-strong"
+                            >
+                              Show open PRs
+                            </button>
+                          </div>
+                        )}
+                      {activeChips.length > 0 && (
+                        <>
+                          <p className="mt-1 text-sm text-dim">
+                            {filterSummary} {activeChips.length === 1 ? 'is' : 'are'} still on.
+                          </p>
+                          <button
+                            onClick={clearAllFilters}
+                            className="tap-safe mt-3 rounded-md border border-line-control bg-surface px-3 py-1.5 text-sm text-muted transition-colors duration-instant ease-out hover:text-ink"
+                          >
+                            Clear{' '}
+                            {activeChips.length === 1
+                              ? activeChips[0].label.toLowerCase()
+                              : 'filters'}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    <PRCardList prs={restPRs} {...listProps} />
+                  )}
+                </>
               )}
             </>
           )}

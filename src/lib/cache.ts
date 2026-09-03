@@ -1,7 +1,19 @@
-import { PrActivityInfo, PullRequestAssessment } from '../types/pr';
-import { executeRest, getViewerLogin, searchAllPullRequests } from './github';
+import { PrActivityInfo, PullRequestAssessment, RecentPullRequest } from '../types/pr';
+import {
+  executeRest,
+  getViewerLogin,
+  searchAllPullRequests,
+  searchRecentPullRequests,
+} from './github';
 import { normalizePullRequests } from './normalizer';
-import { getPageSize, getQueryKey, getSearchQueries, MODES, type Mode } from './config';
+import {
+  getPageSize,
+  getQueryKey,
+  getRecentSearchQueries,
+  getSearchQueries,
+  MODES,
+  type Mode,
+} from './config';
 import { prEventEmitter } from './events';
 import { fetchPrActivity } from './activity';
 import { mapWithConcurrency } from './pool';
@@ -9,6 +21,7 @@ import { isBlocked } from './status';
 
 interface CacheState {
   prs: PullRequestAssessment[];
+  recentPRs: RecentPullRequest[];
   lastUpdated: string;
   query: string;
   syncStatus: 'Healthy' | 'Syncing' | 'Stale Error';
@@ -45,6 +58,7 @@ function emptyState(): ModeState {
   return {
     cache: {
       prs: [],
+      recentPRs: [],
       lastUpdated: new Date().toISOString(),
       query: '',
       syncStatus: 'Healthy',
@@ -79,6 +93,7 @@ function stateFor(mode: Mode): ModeState {
   if (!(st.activityFetchedAt instanceof Map)) st.activityFetchedAt = new Map();
   if (!(st.activityInFlight instanceof Map)) st.activityInFlight = new Map();
   if (!st.activity) st.activity = st.cache?.activity ?? {};
+  if (!st.cache.recentPRs) st.cache.recentPRs = [];
   return st;
 }
 
@@ -170,11 +185,13 @@ export async function getDashboardState(mode: Mode, forceRefresh = false): Promi
   const now = Date.now();
   const st = stateFor(mode);
   const queries = getSearchQueries(mode);
+  const recentCutoff = new Date(now - 7 * 24 * 60 * 60 * 1000);
+  const recentQueries = getRecentSearchQueries(mode, recentCutoff.toISOString().slice(0, 10));
   const query = getQueryKey(mode);
   const first = getPageSize(mode);
 
   // Return cached result if fresh and not forced
-  if (!forceRefresh && st.cache.prs.length > 0 && now - st.lastSyncTimestamp < CACHE_TTL_MS) {
+  if (!forceRefresh && st.lastSyncTimestamp > 0 && now - st.lastSyncTimestamp < CACHE_TTL_MS) {
     return st.cache;
   }
 
@@ -189,7 +206,10 @@ export async function getDashboardState(mode: Mode, forceRefresh = false): Promi
 
     try {
       // Reviews mode needs two searches; GitHub ANDs qualifiers so they cannot be combined.
-      const settled = await Promise.allSettled(queries.map((q) => searchAllPullRequests(q, first)));
+      const [settled, recentSettled] = await Promise.all([
+        Promise.allSettled(queries.map((q) => searchAllPullRequests(q, first))),
+        Promise.allSettled(recentQueries.map((q) => searchRecentPullRequests(q))),
+      ]);
 
       const failures = settled.filter((r) => r.status === 'rejected');
       if (failures.length === settled.length) {
@@ -213,6 +233,34 @@ export async function getDashboardState(mode: Mode, forceRefresh = false): Promi
 
       const truncated = byId.size < matchedTotal || pageCapped;
       let prs = normalizePullRequests(Array.from(byId.values()));
+
+      const recentFailures = recentSettled.filter((result) => result.status === 'rejected');
+      for (const failure of recentFailures) {
+        console.warn('recent PR search failed:', (failure as PromiseRejectedResult).reason);
+      }
+      const recentById = new Map<string, RecentPullRequest>();
+      for (const result of recentSettled) {
+        if (result.status !== 'fulfilled') continue;
+        for (const node of result.value) {
+          const completedAt = node.mergedAt || node.closedAt;
+          if (!completedAt || new Date(completedAt).getTime() < recentCutoff.getTime()) continue;
+          recentById.set(node.id, {
+            id: node.id,
+            number: node.number,
+            title: node.title,
+            url: node.url,
+            repository: node.repository.nameWithOwner,
+            outcome: node.mergedAt ? 'Merged' : 'Closed',
+            completedAt,
+          });
+        }
+      }
+      const recentPRs =
+        recentFailures.length === recentSettled.length
+          ? st.cache.recentPRs
+          : Array.from(recentById.values()).sort(
+              (a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime(),
+            );
 
       // Only the priority zone refreshes on sync. Everything else is fetched lazily
       // by the client for the rows it is actually showing.
@@ -298,6 +346,7 @@ export async function getDashboardState(mode: Mode, forceRefresh = false): Promi
 
       st.cache = {
         prs,
+        recentPRs,
         lastUpdated: new Date().toISOString(),
         query,
         syncStatus: 'Healthy',

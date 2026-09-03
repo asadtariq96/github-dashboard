@@ -14,6 +14,7 @@ export default {
       fontFamily: {
         sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
         mono: ['var(--font-mono)', 'ui-monospace', 'monospace'],
+        display: ['var(--font-display)', 'Georgia', 'serif'],
       },
       fontSize: {
         '2xs': ['11px', { lineHeight: '1.3' }],

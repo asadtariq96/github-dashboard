@@ -69,7 +69,7 @@ export function SortMenu({ value, onChange }: { value: SortId; onChange: (id: So
         aria-expanded={open}
         aria-label={`Sort: ${active.field}, ${active.direction}. Change sort order`}
         title={`${active.field} — ${active.direction}`}
-        className="tap-safe inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2 py-1.5 text-xs text-muted transition-colors duration-instant ease-out hover:border-line-strong hover:text-ink"
+        className="tap-safe inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface-raised px-3 py-2 text-xs text-muted shadow-sm transition-all duration-instant ease-out hover:-translate-y-px hover:border-line-strong hover:text-ink"
       >
         <ArrowUpDown aria-hidden strokeWidth={1.5} className="h-3.5 w-3.5" />
         <span className="whitespace-nowrap">{active.short}</span>

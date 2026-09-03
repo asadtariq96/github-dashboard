@@ -232,6 +232,7 @@ export interface PrActivityInfo {
 
 export interface DashboardSyncResponse {
   prs: PullRequestAssessment[];
+  recentPRs: RecentPullRequest[];
   lastUpdated: string;
   query: string;
   syncStatus: 'Healthy' | 'Syncing' | 'Stale Error';
@@ -243,4 +244,14 @@ export interface DashboardSyncResponse {
   mode?: 'mine' | 'reviews';
   /** Age in ms of the last sync of every other mode. Null when never synced. */
   otherAges?: Record<string, number | null>;
+}
+
+export interface RecentPullRequest {
+  id: string;
+  number: number;
+  title: string;
+  url: string;
+  repository: string;
+  outcome: 'Merged' | 'Closed';
+  completedAt: string;
 }
