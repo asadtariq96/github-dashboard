@@ -6,11 +6,19 @@ export function getGitHubToken(): string {
   }
 
   try {
-    const token = execSync('gh auth token', {
+    const output = execSync('gh auth token', {
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'ignore'],
     });
-    return token.trim();
+    // `gh` via mise/shims can print a "mise ... tools:" notice to stdout before the
+    // token. Take the last non-empty line so the Authorization header stays valid.
+    const token = output
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .pop();
+    if (!token) throw new Error('empty token');
+    return token;
   } catch {
     throw new Error('No GITHUB_TOKEN environment variable set and `gh auth token` failed.');
   }

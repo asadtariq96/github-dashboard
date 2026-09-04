@@ -720,7 +720,7 @@ export function DashboardView({ mode }: { mode: Mode }) {
   );
 
   return (
-    <div className="min-h-dvh">
+    <div className="flex h-dvh min-h-0 flex-col overflow-hidden">
       <DashboardHeader
         mode={mode}
         searchQuery={searchQuery}
@@ -734,7 +734,7 @@ export function DashboardView({ mode }: { mode: Mode }) {
         onRefresh={() => fetchDashboardState(true)}
       />
 
-      <div className="flex flex-col sm:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden sm:flex-row">
         <Rail
           mode={mode}
           collapsed={railCollapsed}
@@ -749,21 +749,58 @@ export function DashboardView({ mode }: { mode: Mode }) {
           onSelectRepo={setSelectedRepo}
         />
 
-        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-          <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p className="mb-1.5 font-mono text-2xs uppercase tracking-[0.16em] text-dim">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-4 py-3 sm:px-6 lg:px-8">
+          <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-line bg-surface/75 p-2 shadow-sm backdrop-blur-sm">
+            <div className="shrink-0 px-1">
+              <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-dim">
                 {mode === 'mine' ? 'Your workspace' : 'Review inbox'}
               </p>
-              <h2 className="font-display text-2xl capitalize tracking-tight text-ink sm:text-[34px] sm:leading-none">
+              <h2 className="font-display text-xl capitalize leading-none tracking-tight text-ink">
                 {activeViewLabel}
               </h2>
             </div>
-            <p className="max-w-md text-sm leading-relaxed text-muted">
-              {mode === 'mine'
-                ? 'A focused view of what is moving, blocked, or ready to ship.'
-                : 'Requests that need a thoughtful pass before they can move forward.'}
-            </p>
+
+            <span aria-hidden className="hidden h-7 w-px bg-line sm:block" />
+
+            <div className="relative min-w-[12rem] flex-1 sm:hidden">
+              <Search
+                aria-hidden
+                className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-dim"
+              />
+              <input
+                type="text"
+                placeholder="Search"
+                aria-label="Search pull requests"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="tap-safe w-full rounded-md border border-line-control bg-surface py-2 pl-8 pr-2 text-sm text-ink placeholder:text-dim focus:border-accent focus:outline-none"
+              />
+            </div>
+
+            <span className="shrink-0 px-1 font-mono text-xs tabular text-dim">
+              {activeView === 'done-recently' ? shownDoneRecently.length : filteredPRs.length} shown
+            </span>
+
+            {activeChips.length > 0 && (
+              <div className="min-w-0">
+                <FilterChips chips={activeChips} onClearAll={clearAllFilters} />
+              </div>
+            )}
+
+            {unreadTotal > 0 && (
+              <button
+                onClick={handleMarkAllSeen}
+                className="tap-safe inline-flex shrink-0 items-center gap-1.5 rounded-md border border-accent/30 bg-accent-wash px-2 py-1 text-xs font-medium text-accent transition-colors duration-instant ease-out hover:border-accent"
+              >
+                Mark {unreadTotal} seen
+              </button>
+            )}
+
+            {activeView !== 'done-recently' && (
+              <div className="ml-auto flex shrink-0 items-center">
+                <SortMenu value={sortId} onChange={setSortId} />
+              </div>
+            )}
           </div>
           {error && (
             <div
@@ -794,83 +831,39 @@ export function DashboardView({ mode }: { mode: Mode }) {
             </div>
           )}
 
-          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface/75 p-2 shadow-sm backdrop-blur-sm">
-            <div className="relative min-w-0 flex-1 sm:hidden">
-              <Search
-                aria-hidden
-                className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-dim"
-              />
-              <input
-                type="text"
-                placeholder="Search"
-                aria-label="Search pull requests"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="tap-safe w-full rounded-md border border-line-control bg-surface py-2 pl-8 pr-2 text-sm text-ink placeholder:text-dim focus:border-accent focus:outline-none"
-              />
-            </div>
-
-            <span className="px-1.5 font-mono text-xs tabular text-dim">
-              {activeView === 'done-recently' ? shownDoneRecently.length : filteredPRs.length} shown
-            </span>
-
-            {unreadTotal > 0 && (
-              <button
-                onClick={handleMarkAllSeen}
-                className="tap-safe inline-flex items-center gap-1.5 rounded-md border border-accent/30 bg-accent-wash px-2 py-1 text-xs font-medium text-accent transition-colors duration-instant ease-out hover:border-accent"
-              >
-                Mark {unreadTotal} seen
-              </button>
-            )}
-
-            {activeView !== 'done-recently' && (
-              <div className="ml-auto flex items-center gap-2">
-                <SortMenu value={sortId} onChange={setSortId} />
+          <div className="min-h-0 flex-1 overflow-hidden">
+            {loading ? (
+              <div className="scroll-region h-full overflow-y-auto rounded-md border border-line bg-surface px-6 py-20 text-center">
+                <RefreshCw aria-hidden className="mx-auto h-6 w-6 animate-spin text-accent" />
+                <p className="mt-3 text-sm text-muted">Loading pull requests…</p>
               </div>
-            )}
-          </div>
-
-          {activeChips.length > 0 && (
-            <div className="mb-3">
-              <FilterChips chips={activeChips} onClearAll={clearAllFilters} />
-            </div>
-          )}
-
-          {loading ? (
-            <div className="rounded-md border border-line bg-surface px-6 py-20 text-center">
-              <RefreshCw aria-hidden className="mx-auto h-6 w-6 animate-spin text-accent" />
-              <p className="mt-3 text-sm text-muted">Loading pull requests…</p>
-            </div>
-          ) : (
-            <>
-              {activeView === 'done-recently' ? (
-                shownDoneRecently.length > 0 ? (
+            ) : activeView === 'done-recently' ? (
+              <div className="scroll-region h-full overflow-y-auto pb-4 pr-1">
+                {shownDoneRecently.length > 0 ? (
                   <DoneRecentlyList items={shownDoneRecently} />
                 ) : (
                   <DoneRecentlyEmpty hasAny={doneRecently.length > 0} />
-                )
-              ) : (
-                <>
-                  {filteredPRs.length === 0 ? (
-                    <EmptyQueue
-                      activeView={activeView}
-                      activeViewLabel={activeViewLabel}
-                      selectedRepoSummary={selectedRepoSummary}
-                      onUnhideRepo={unhideSelectedRepo}
-                      onViewSnoozed={() => setActiveView('snoozed')}
-                      onShowAll={() => setActiveView('all')}
-                      activeChips={activeChips}
-                      filterSummary={filterSummary}
-                      onClearFilters={clearAllFilters}
-                      hasSearchQuery={searchQuery.trim() !== ''}
-                    />
-                  ) : (
-                    <PRCardList prs={filteredPRs} {...listProps} />
-                  )}
-                </>
-              )}
-            </>
-          )}
+                )}
+              </div>
+            ) : filteredPRs.length === 0 ? (
+              <div className="scroll-region h-full overflow-y-auto pb-4 pr-1">
+                <EmptyQueue
+                  activeView={activeView}
+                  activeViewLabel={activeViewLabel}
+                  selectedRepoSummary={selectedRepoSummary}
+                  onUnhideRepo={unhideSelectedRepo}
+                  onViewSnoozed={() => setActiveView('snoozed')}
+                  onShowAll={() => setActiveView('all')}
+                  activeChips={activeChips}
+                  filterSummary={filterSummary}
+                  onClearFilters={clearAllFilters}
+                  hasSearchQuery={searchQuery.trim() !== ''}
+                />
+              </div>
+            ) : (
+              <PRCardList prs={filteredPRs} {...listProps} />
+            )}
+          </div>
         </main>
       </div>
 

@@ -220,128 +220,133 @@ export function PRCardList({
   if (prs.length === 0) return null;
 
   return (
-    <>
-      <div className="mb-2 flex justify-end">
-        <button
-          onClick={() => setPaletteOpen(true)}
-          className="inline-flex items-center gap-2 rounded-md px-2 py-1 text-xs text-dim hover:bg-surface-hover hover:text-ink"
-        >
-          <Keyboard aria-hidden className="h-3.5 w-3.5" />
-          Commands
-          <kbd className="rounded border border-line bg-surface-raised px-1.5 py-0.5 font-mono text-2xs">
-            ⌘K
-          </kbd>
-        </button>
-      </div>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      {!activePR && (
+        <div className="mb-1 flex justify-end">
+          <button
+            onClick={() => setPaletteOpen(true)}
+            className="inline-flex items-center gap-2 rounded-md px-2 py-1 text-xs text-dim hover:bg-surface-hover hover:text-ink"
+          >
+            <Keyboard aria-hidden className="h-3.5 w-3.5" />
+            Commands
+            <kbd className="rounded border border-line bg-surface-raised px-1.5 py-0.5 font-mono text-2xs">
+              ⌘K
+            </kbd>
+          </button>
+        </div>
+      )}
       <div
         ref={workspaceRef}
         data-inspecting={activePR ? 'true' : 'false'}
         data-resizing={resizing ? 'true' : 'false'}
         style={{ '--master-width': `${masterPercent}%` } as React.CSSProperties}
-        className={`pr-workspace grid items-start ${activePR ? '' : 'gap-5'}`}
+        className={`pr-workspace grid min-h-0 flex-1 items-stretch overflow-hidden ${
+          activePR ? 'xl:grid-rows-[100%]' : ''
+        }`}
       >
-        <ul className="flex min-w-0 flex-col gap-4">
-          <AnimatePresence mode="popLayout">
-            {visiblePRs.map((pr, i) => (
-              <motion.li
-                key={pr.id}
-                layout="position"
-                initial={revealing ? 'hidden' : false}
-                animate="shown"
-                exit="gone"
-                variants={cardVariants}
-                transition={{
-                  layout: REORDER_SPRING,
-                  default: revealing
-                    ? { duration: 0.3, ease: EASE_OUT, delay: revealDelay(i) }
-                    : CARD_SPRING,
-                }}
-              >
-                <PRCard
-                  pr={pr}
-                  mode={mode}
-                  isExpanded={false}
-                  contained
-                  inspected={activeId === pr.id}
-                  onToggleExpand={() => inspect(pr)}
-                  isHidden={hiddenPRIds.has(pr.id)}
-                  onToggleHide={onToggleHidePR ? () => onToggleHidePR(pr.id) : undefined}
-                  onRunAction={onRunAction}
-                  busyAction={busy?.[pr.id] ?? null}
-                  activity={activity?.[`${pr.repository.nameWithOwner}#${pr.number}`]}
-                  onRefresh={onRefresh}
-                  selected={selectedPRIds?.has(pr.id) ?? false}
-                  onToggleSelect={
-                    onToggleSelect ? (shiftKey) => onToggleSelect(pr.id, shiftKey) : undefined
-                  }
-                />
-              </motion.li>
-            ))}
-          </AnimatePresence>
-        </ul>
-        {visibleCount < prs.length && (
-          <button
-            type="button"
-            onClick={() => setVisibleCount((n) => n + 50)}
-            className="mt-4 w-full rounded-lg border border-line bg-surface px-4 py-2.5 text-sm font-medium text-muted shadow-sm transition-colors hover:border-line-strong hover:text-ink"
-          >
-            Show {Math.min(50, prs.length - visibleCount)} more of {prs.length - visibleCount}{' '}
-            remaining
-          </button>
-        )}
-
-        <div
-          role={activePR ? 'separator' : undefined}
-          aria-hidden={activePR ? undefined : true}
-          aria-label="Resize pull request list and inspector"
-          aria-orientation="vertical"
-          aria-valuemin={MIN_MASTER_PERCENT}
-          aria-valuemax={MAX_MASTER_PERCENT}
-          aria-valuenow={Math.round(masterPercent)}
-          tabIndex={activePR ? 0 : -1}
-          onPointerDown={(event) => {
-            if (!activePR) return;
-            event.preventDefault();
-            event.currentTarget.setPointerCapture(event.pointerId);
-            resizingRef.current = true;
-            setResizing(true);
-            updateSplit(event.clientX);
-          }}
-          onPointerMove={(event) => {
-            if (resizingRef.current) updateSplit(event.clientX);
-          }}
-          onPointerUp={(event) => {
-            if (!resizingRef.current) return;
-            event.currentTarget.releasePointerCapture(event.pointerId);
-            commitSplit();
-          }}
-          onLostPointerCapture={() => {
-            if (resizingRef.current) commitSplit();
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-            event.preventDefault();
-            const availableMax = workspaceRef.current
-              ? maxMasterPercent(workspaceRef.current.clientWidth)
-              : MAX_MASTER_PERCENT;
-            const next = Math.max(
-              MIN_MASTER_PERCENT,
-              Math.min(availableMax, masterPercent + (event.key === 'ArrowRight' ? 2 : -2)),
-            );
-            masterPercentRef.current = next;
-            setMasterPercent(next);
-            commitSplit(next);
-          }}
-          className={`group hidden h-[calc(100dvh-var(--header-height)-48px)] items-center justify-center outline-none xl:flex ${
-            activePR ? 'cursor-col-resize' : 'pointer-events-none opacity-0'
-          }`}
-        >
-          <span
-            className={`h-full w-px rounded-full transition-all duration-instant group-hover:w-1 group-hover:bg-accent group-focus-visible:w-1 group-focus-visible:bg-accent ${
-              resizing ? 'w-1 bg-accent' : 'bg-line-strong'
-            }`}
-          />
+        <div className="scroll-region min-h-0 min-w-0 overflow-y-auto pb-6 pr-1">
+          <ul className="flex min-w-0 flex-col gap-4">
+            <AnimatePresence mode="popLayout">
+              {visiblePRs.map((pr, i) => (
+                <motion.li
+                  key={pr.id}
+                  layout="position"
+                  initial={revealing ? 'hidden' : false}
+                  animate="shown"
+                  exit="gone"
+                  variants={cardVariants}
+                  transition={{
+                    layout: REORDER_SPRING,
+                    default: revealing
+                      ? { duration: 0.3, ease: EASE_OUT, delay: revealDelay(i) }
+                      : CARD_SPRING,
+                  }}
+                >
+                  <PRCard
+                    pr={pr}
+                    mode={mode}
+                    isExpanded={false}
+                    contained
+                    inspected={activeId === pr.id}
+                    onToggleExpand={() => inspect(pr)}
+                    isHidden={hiddenPRIds.has(pr.id)}
+                    onToggleHide={onToggleHidePR ? () => onToggleHidePR(pr.id) : undefined}
+                    onRunAction={onRunAction}
+                    busyAction={busy?.[pr.id] ?? null}
+                    activity={activity?.[`${pr.repository.nameWithOwner}#${pr.number}`]}
+                    onRefresh={onRefresh}
+                    selected={selectedPRIds?.has(pr.id) ?? false}
+                    onToggleSelect={
+                      onToggleSelect ? (shiftKey) => onToggleSelect(pr.id, shiftKey) : undefined
+                    }
+                  />
+                </motion.li>
+              ))}
+            </AnimatePresence>
+          </ul>
+          {visibleCount < prs.length && (
+            <button
+              type="button"
+              onClick={() => setVisibleCount((n) => n + 50)}
+              className="mt-4 w-full rounded-lg border border-line bg-surface px-4 py-2.5 text-sm font-medium text-muted shadow-sm transition-colors hover:border-line-strong hover:text-ink"
+            >
+              Show {Math.min(50, prs.length - visibleCount)} more of {prs.length - visibleCount}{' '}
+              remaining
+            </button>
+          )}
         </div>
+
+        {activePR && (
+          <div
+            role="separator"
+            aria-label="Resize pull request list and inspector"
+            aria-orientation="vertical"
+            aria-valuemin={MIN_MASTER_PERCENT}
+            aria-valuemax={MAX_MASTER_PERCENT}
+            aria-valuenow={Math.round(masterPercent)}
+            tabIndex={0}
+            onPointerDown={(event) => {
+              if (!activePR) return;
+              event.preventDefault();
+              event.currentTarget.setPointerCapture(event.pointerId);
+              resizingRef.current = true;
+              setResizing(true);
+              updateSplit(event.clientX);
+            }}
+            onPointerMove={(event) => {
+              if (resizingRef.current) updateSplit(event.clientX);
+            }}
+            onPointerUp={(event) => {
+              if (!resizingRef.current) return;
+              event.currentTarget.releasePointerCapture(event.pointerId);
+              commitSplit();
+            }}
+            onLostPointerCapture={() => {
+              if (resizingRef.current) commitSplit();
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+              event.preventDefault();
+              const availableMax = workspaceRef.current
+                ? maxMasterPercent(workspaceRef.current.clientWidth)
+                : MAX_MASTER_PERCENT;
+              const next = Math.max(
+                MIN_MASTER_PERCENT,
+                Math.min(availableMax, masterPercent + (event.key === 'ArrowRight' ? 2 : -2)),
+              );
+              masterPercentRef.current = next;
+              setMasterPercent(next);
+              commitSplit(next);
+            }}
+            className="group hidden cursor-col-resize items-center justify-center outline-none xl:flex xl:self-stretch"
+          >
+            <span
+              className={`h-full w-px rounded-full transition-all duration-instant group-hover:w-1 group-hover:bg-accent group-focus-visible:w-1 group-focus-visible:bg-accent ${
+                resizing ? 'w-1 bg-accent' : 'bg-line-strong'
+              }`}
+            />
+          </div>
+        )}
 
         <AnimatePresence mode="wait">
           {activePR && (
@@ -352,7 +357,7 @@ export function PRCardList({
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 8 }}
               transition={{ duration: 0.16, ease: EASE_OUT }}
-              className="fixed inset-x-3 bottom-3 z-drawer max-h-[85dvh] min-w-0 overflow-y-auto rounded-lg bg-canvas p-2 shadow-float xl:sticky xl:inset-auto xl:top-[calc(var(--header-height)+16px)] xl:z-auto xl:max-h-[calc(100dvh-var(--header-height)-32px)] xl:rounded-none xl:bg-transparent xl:p-0 xl:pb-6 xl:shadow-none"
+              className="scroll-region fixed inset-x-3 bottom-3 z-drawer max-h-[85dvh] min-w-0 overflow-y-auto rounded-lg bg-canvas p-2 shadow-float xl:static xl:z-auto xl:flex xl:h-full xl:max-h-none xl:min-h-0 xl:flex-col xl:overflow-hidden xl:rounded-none xl:bg-transparent xl:p-0 xl:pr-1 xl:shadow-none"
             >
               <div className="mb-2 flex items-center gap-2 px-1">
                 <Keyboard aria-hidden className="h-3.5 w-3.5 text-dim" />
@@ -365,18 +370,19 @@ export function PRCardList({
                   <X aria-hidden className="h-4 w-4" />
                 </button>
               </div>
-              <ChangeSummary digest={digests[activePR.id]} />
-              <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface/75 p-2">
-                <span className="px-1 text-xs text-dim">Set aside</span>
+              <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface/75 px-3 py-2 shadow-sm">
+                <ChangeSummary digest={digests[activePR.id]} />
+                <span aria-hidden className="hidden h-5 w-px bg-line 2xl:block" />
+                <span className="text-xs text-dim">Set aside</span>
                 <button
                   onClick={() => onSnooze?.(activePR, Date.now() + 24 * 60 * 60 * 1000)}
-                  className="rounded-md border border-line bg-surface-raised px-2.5 py-1.5 text-xs text-muted hover:text-ink"
+                  className="rounded-md border border-line bg-surface-raised px-2 py-1 text-xs text-muted hover:text-ink"
                 >
                   Tomorrow
                 </button>
                 <button
                   onClick={() => onSnooze?.(activePR, Date.now() + 7 * 24 * 60 * 60 * 1000)}
-                  className="rounded-md border border-line bg-surface-raised px-2.5 py-1.5 text-xs text-muted hover:text-ink"
+                  className="rounded-md border border-line bg-surface-raised px-2 py-1 text-xs text-muted hover:text-ink"
                 >
                   Next week
                 </button>
@@ -389,22 +395,25 @@ export function PRCardList({
                   </button>
                 )}
               </div>
-              <PRCard
-                key={activePR.id}
-                pr={activePR}
-                mode={mode}
-                isExpanded
-                hideStats
-                onToggleExpand={() => setActiveId(null)}
-                isHidden={hiddenPRIds.has(activePR.id)}
-                onToggleHide={onToggleHidePR ? () => onToggleHidePR(activePR.id) : undefined}
-                onRunAction={onRunAction}
-                busyAction={busy?.[activePR.id] ?? null}
-                activity={activity?.[`${activePR.repository.nameWithOwner}#${activePR.number}`]}
-                onRefresh={onRefresh}
-                activeTab={activeTab}
-                onTabChange={setActiveTab}
-              />
+              <div className="scroll-region min-h-0 xl:flex-1 xl:overflow-y-auto">
+                <PRCard
+                  key={activePR.id}
+                  pr={activePR}
+                  mode={mode}
+                  isExpanded
+                  fillAvailable
+                  hideStats
+                  onToggleExpand={() => setActiveId(null)}
+                  isHidden={hiddenPRIds.has(activePR.id)}
+                  onToggleHide={onToggleHidePR ? () => onToggleHidePR(activePR.id) : undefined}
+                  onRunAction={onRunAction}
+                  busyAction={busy?.[activePR.id] ?? null}
+                  activity={activity?.[`${activePR.repository.nameWithOwner}#${activePR.number}`]}
+                  onRefresh={onRefresh}
+                  activeTab={activeTab}
+                  onTabChange={setActiveTab}
+                />
+              </div>
             </motion.aside>
           )}
         </AnimatePresence>
@@ -414,6 +423,6 @@ export function PRCardList({
         onClose={() => setPaletteOpen(false)}
         commands={commands}
       />
-    </>
+    </div>
   );
 }

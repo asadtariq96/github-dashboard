@@ -112,6 +112,7 @@ export function PRCard({
   selected = false,
   inspected = false,
   contained = false,
+  fillAvailable = false,
   hideStats = false,
   onToggleSelect,
   activeTab,
@@ -135,6 +136,8 @@ export function PRCard({
   inspected?: boolean;
   /** Reflows the complete summary when the card lives in the narrower master column. */
   contained?: boolean;
+  /** Stretch an expanded card to the height supplied by its inspector column. */
+  fillAvailable?: boolean;
   /** Inspector headers trade duplicated summary stats for more title room. */
   hideStats?: boolean;
   /** Shift held means select the range from the last one picked. */
@@ -187,6 +190,8 @@ export function PRCard({
     <article
       aria-selected={onToggleSelect ? selected : undefined}
       className={`overflow-hidden rounded-lg border bg-surface shadow-sm transition-all duration-fast ease-out ${
+        fillAvailable ? 'h-full' : ''
+      } ${
         selected
           ? 'border-accent ring-2 ring-accent/20'
           : inspected
@@ -196,7 +201,12 @@ export function PRCard({
               : 'border-line hover:border-line-strong hover:shadow-md'
       }`}
     >
-      <div title={railLabels[rail]} className={`border-l-[3px] ${railBorders[rail]}`}>
+      <div
+        title={railLabels[rail]}
+        className={`border-l-[3px] ${railBorders[rail]} ${
+          fillAvailable ? 'flex h-full min-h-0 flex-col' : ''
+        }`}
+      >
         <div
           onClick={handleToggle}
           className={`flex cursor-pointer select-none items-center gap-4 px-5 py-4 transition-colors duration-instant ease-out hover:bg-surface-hover ${
@@ -389,7 +399,9 @@ export function PRCard({
           {isExpanded && (
             <motion.div
               key="body"
-              className="overflow-hidden"
+              className={
+                fillAvailable ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : 'overflow-hidden'
+              }
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
@@ -476,28 +488,34 @@ export function PRCard({
                 Description and files take the whole card, because prose and diffs need the width.
                 Checks and threads sit side by side once there is room for both.
               */}
-              {tab === 'description' ? (
-                <DescriptionPanel pr={pr} />
-              ) : tab === 'files' ? (
-                <DiffPanel pr={pr} />
-              ) : (
-                <div className="grid grid-cols-1 divide-y divide-line xl:grid-cols-2 xl:divide-x xl:divide-y-0">
-                  {/* The left pane is whichever of queue or checks the tab selects. */}
-                  <div className={tab === 'queue' || tab === 'checks' ? '' : 'hidden xl:block'}>
-                    {tab === 'queue' ? <MergeQueuePanel pr={pr} /> : <ChecksPanel pr={pr} />}
+              <div
+                className={
+                  fillAvailable ? 'scroll-region min-h-0 flex-1 overflow-y-auto' : 'min-h-0'
+                }
+              >
+                {tab === 'description' ? (
+                  <DescriptionPanel pr={pr} />
+                ) : tab === 'files' ? (
+                  <DiffPanel pr={pr} />
+                ) : (
+                  <div className="grid grid-cols-1 divide-y divide-line xl:grid-cols-2 xl:divide-x xl:divide-y-0">
+                    {/* The left pane is whichever of queue or checks the tab selects. */}
+                    <div className={tab === 'queue' || tab === 'checks' ? '' : 'hidden xl:block'}>
+                      {tab === 'queue' ? <MergeQueuePanel pr={pr} /> : <ChecksPanel pr={pr} />}
+                    </div>
+                    <div className={tab === 'threads' ? '' : 'hidden xl:block'}>
+                      <ThreadsPanel
+                        pr={pr}
+                        unreadSinceMs={
+                          newActivity.thresholdTs ? new Date(newActivity.thresholdTs).getTime() : 0
+                        }
+                        onChanged={onRefresh ?? (() => undefined)}
+                        openFirst={openFirstThread}
+                      />
+                    </div>
                   </div>
-                  <div className={tab === 'threads' ? '' : 'hidden xl:block'}>
-                    <ThreadsPanel
-                      pr={pr}
-                      unreadSinceMs={
-                        newActivity.thresholdTs ? new Date(newActivity.thresholdTs).getTime() : 0
-                      }
-                      onChanged={onRefresh ?? (() => undefined)}
-                      openFirst={openFirstThread}
-                    />
-                  </div>
-                </div>
-              )}
+                )}
+              </div>
 
               <div className="flex flex-wrap items-center gap-2 border-t border-line bg-surface-hover px-4 py-3">
                 {actions.map((action) => (

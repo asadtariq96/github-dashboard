@@ -191,6 +191,12 @@
 }
 
 @layer base {
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
+
   body {
     color: var(--text);
     background: var(--bg);
@@ -207,6 +213,36 @@
   ::selection {
     background: var(--selection);
   }
+}
+
+/* Scroll stays inside workspace regions. The thumb is quiet until the region is used. */
+.scroll-region {
+  overscroll-behavior: contain;
+  scrollbar-color: var(--border-control) transparent;
+  scrollbar-width: thin;
+}
+
+.scroll-region::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.scroll-region::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll-region::-webkit-scrollbar-thumb {
+  min-height: 36px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--border-control);
+  background-clip: padding-box;
+}
+
+.scroll-region::-webkit-scrollbar-thumb:hover {
+  border-width: 2px;
+  background: var(--text-dim);
+  background-clip: padding-box;
 }
 
 /* The master/inspector split is single-column below desktop and user-resizable above it. */

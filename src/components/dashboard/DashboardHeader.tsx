@@ -37,7 +37,7 @@ export function DashboardHeader({
   })();
 
   return (
-    <header className="sticky top-0 z-chrome flex h-header items-center gap-3 border-b border-line/80 bg-surface/90 px-4 backdrop-blur-xl sm:px-6">
+    <header className="z-chrome flex h-header shrink-0 items-center gap-3 border-b border-line/80 bg-surface/90 px-4 backdrop-blur-xl sm:px-6">
       <div className="flex shrink-0 items-center gap-2.5">
         <span aria-hidden className="relative block h-5 w-5 text-accent">
           <span className="absolute left-1/2 top-0 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-current" />

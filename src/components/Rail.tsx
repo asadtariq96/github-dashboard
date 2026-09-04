@@ -240,7 +240,7 @@ export function Rail({
   return (
     <nav
       aria-label="Views and repositories"
-      className={`sticky top-header z-chrome shrink-0 bg-surface/55 backdrop-blur-sm transition-[width] duration-base ease-out max-sm:w-full max-sm:border-b max-sm:border-line sm:h-[calc(100dvh-var(--header-height))] sm:overflow-y-auto sm:border-r sm:border-line sm:py-3 ${width}`}
+      className={`scroll-region z-chrome shrink-0 bg-surface/55 backdrop-blur-sm transition-[width] duration-base ease-out max-sm:w-full max-sm:border-b max-sm:border-line sm:h-full sm:min-h-0 sm:overflow-y-auto sm:border-r sm:border-line sm:py-3 ${width}`}
     >
       <div className="hidden h-9 items-center px-2 lg:flex">
         <button
