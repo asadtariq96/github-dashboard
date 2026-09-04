@@ -4,12 +4,12 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { DashboardSyncResponse, PrActivityInfo, PullRequestAssessment } from '../types/pr';
 import type { Mode } from '../lib/config';
 import { PRCardList } from './PRCardList';
-import { ThemeToggle } from './ThemeToggle';
-import { ModeSwitch } from './ModeSwitch';
 import { toast } from 'sonner';
 import { ConfirmDialog, type ConfirmState } from './ConfirmDialog';
 import { BatchToolbar } from './BatchToolbar';
-import { actionById, failedRunUrls, type RowActionId } from '../lib/rowAction';
+import { actionById, type RowActionId } from '../lib/rowAction';
+import { buildActionCall, confirmDetailFor, postApi } from '../lib/prApi';
+import { filterPrs } from '../lib/filterPrs';
 import { DEFAULT_SORT, isSortId, makeComparator, type SortId } from '../lib/sort';
 import { readDeskParams, writeDeskUrl, deskParamsSearch, type DeskParams } from '../lib/urlState';
 import { SortMenu } from './SortMenu';
@@ -25,16 +25,11 @@ import {
   type RecentCompletion,
   type SnoozeMap,
 } from '../lib/workQueue';
-import {
-  Rail,
-  countViews,
-  defaultViewFor,
-  isViewFor,
-  matchesView,
-  viewsFor,
-  type ViewId,
-} from './Rail';
-import { RefreshCw, Search, AlertCircle, CheckCircle2, ExternalLink } from 'lucide-react';
+import { Rail, countViews, defaultViewFor, isViewFor, viewsFor, type ViewId } from './Rail';
+import { RefreshCw, Search, AlertCircle } from 'lucide-react';
+import { DashboardHeader } from './dashboard/DashboardHeader';
+import { DoneRecentlyEmpty, DoneRecentlyList } from './dashboard/DoneRecentlyList';
+import { EmptyQueue } from './dashboard/EmptyQueue';
 
 const URL_WRITE_DEBOUNCE_MS = 300;
 
@@ -206,65 +201,10 @@ export function DashboardView({ mode }: { mode: Mode }) {
   };
 
   /** Each action names its endpoint, its body, and what it says when it lands. */
-  const ACTION_CALLS: Record<
-    RowActionId,
-    (pr: PullRequestAssessment) => { url: string; body: unknown; done: string }
-  > = {
-    'approve-deployment': (pr) => ({
-      url: '/api/prs/approve-deployment',
-      body: {
-        repoWithOwner: pr.repository.nameWithOwner,
-        runId: pr.mergeQueueInfo?.runId,
-        environmentIds: pr.mergeQueueInfo?.environmentIds,
-        comment: `Approved from PR Desk for #${pr.number}`,
-      },
-      done: `Approved deployment for #${pr.number}`,
-    }),
-    'update-branch': (pr) => ({
-      url: '/api/prs/update-branch',
-      body: { prId: pr.id },
-      done: `Updated #${pr.number} from ${pr.baseRefName}`,
-    }),
-    'rerun-checks': (pr) => ({
-      url: '/api/prs/rerun-checks',
-      body: { repo: pr.repository.nameWithOwner, detailsUrls: failedRunUrls(pr) },
-      done: `Re-running failed jobs on #${pr.number}`,
-    }),
-    merge: (pr) => ({
-      url: '/api/prs/merge',
-      body: { prId: pr.id, enqueue: Boolean(pr.hasRepoMergeQueue), mergeMethod: 'SQUASH' },
-      done: pr.hasRepoMergeQueue ? `Added #${pr.number} to the queue` : `Merged #${pr.number}`,
-    }),
-    'mark-ready': (pr) => ({
-      url: '/api/prs/mark-ready',
-      body: { prId: pr.id },
-      done: `#${pr.number} is ready for review`,
-    }),
-    dequeue: (pr) => ({
-      url: '/api/prs/dequeue',
-      body: { prId: pr.id },
-      done: `Removed #${pr.number} from the queue`,
-    }),
-    close: (pr) => ({
-      url: '/api/prs/close',
-      body: { prId: pr.id },
-      done: `Closed #${pr.number}`,
-    }),
-  };
-
-  const post = async (url: string, body: unknown): Promise<string> => {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok || json?.ok === false) throw new Error(json?.error || `HTTP ${res.status}`);
-    return json?.message || '';
-  };
+  const post = postApi;
 
   const runAction = async (pr: PullRequestAssessment, id: RowActionId) => {
-    const call = ACTION_CALLS[id](pr);
+    const call = buildActionCall(pr, id);
     setBusy((current) => ({ ...current, [pr.id]: id }));
     try {
       await post(call.url, call.body);
@@ -317,16 +257,6 @@ export function DashboardView({ mode }: { mode: Mode }) {
 
   const busyCount = Object.keys(busy).length;
 
-  const CONFIRM_DETAIL: Partial<Record<RowActionId, (pr: PullRequestAssessment) => string>> = {
-    merge: (pr) => `${pr.title}\n\nThis cannot be undone.`,
-    'approve-deployment': (pr) =>
-      `${pr.mergeQueueInfo?.approvalStepName || 'Manual approval'} on ${pr.repository.nameWithOwner}. This cannot be undone.`,
-    close: (pr) =>
-      `${pr.title}\n\nEveryone watching the pull request sees this. Reopening it is possible, but only on GitHub.`,
-    dequeue: (pr) =>
-      `${pr.title}\n\nThe queue drops its speculative checks and the pull requests behind it re-run.`,
-  };
-
   const handleRunAction = (pr: PullRequestAssessment, id: RowActionId) => {
     const action = actionById(pr, id);
     if (!action) return;
@@ -341,7 +271,7 @@ export function DashboardView({ mode }: { mode: Mode }) {
 
     setConfirm({
       title: `${action.label} on #${pr.number}?`,
-      detail: CONFIRM_DETAIL[id]?.(pr) ?? pr.title,
+      detail: confirmDetailFor(id, pr) ?? pr.title,
       confirmLabel: action.label,
       run: () => runAction(pr, id),
     });
@@ -410,40 +340,13 @@ export function DashboardView({ mode }: { mode: Mode }) {
   );
 
   const filteredPRs = useMemo(() => {
-    const list = prs.filter((pr) => {
-      const isHidden = hiddenPRIds.has(pr.id);
-      const snoozed = isSnoozed(snoozedUntil, pr.id);
-      if (activeView === 'hidden') {
-        if (!isHidden) return false;
-      } else {
-        if (isHidden) return false;
-        if (activeView === 'snoozed') {
-          if (!snoozed) return false;
-        } else {
-          if (snoozed || activeView === 'done-recently') return false;
-          if (activeView === 'act-now' && !needsAction(mode, pr)) return false;
-          if (activeView === 'waiting' && needsAction(mode, pr)) return false;
-          if (
-            activeView !== 'act-now' &&
-            activeView !== 'waiting' &&
-            !matchesView(mode, activeView, pr)
-          )
-            return false;
-        }
-      }
-      if (selectedRepo !== 'all' && pr.repository.nameWithOwner !== selectedRepo) return false;
-      if (searchQuery.trim() !== '') {
-        const q = searchQuery.toLowerCase();
-        if (
-          !pr.number.toString().includes(q) &&
-          !pr.title.toLowerCase().includes(q) &&
-          !pr.repository.nameWithOwner.toLowerCase().includes(q) &&
-          !pr.headRefName.toLowerCase().includes(q) &&
-          !pr.author.login.toLowerCase().includes(q)
-        )
-          return false;
-      }
-      return true;
+    const list = filterPrs(prs, {
+      mode,
+      activeView,
+      selectedRepo,
+      searchQuery,
+      hiddenPRIds,
+      snoozedUntil,
     });
 
     return list.sort(makeComparator(mode, sortId, unreadOf));
@@ -567,7 +470,7 @@ export function DashboardView({ mode }: { mode: Mode }) {
       while (queue.length > 0) {
         const pr = queue.shift();
         if (!pr) return;
-        const call = ACTION_CALLS[action](pr);
+        const call = buildActionCall(pr, action);
         setBusy((current) => ({ ...current, [pr.id]: action }));
         try {
           await post(call.url, call.body);
@@ -768,12 +671,6 @@ export function DashboardView({ mode }: { mode: Mode }) {
     viewsFor(mode)
       .find((v) => v.id === activeView)
       ?.label.toLowerCase() ?? 'this view';
-  const otherAgeMs = useMemo(() => {
-    const ages = data?.otherAges;
-    if (!ages) return null;
-    const key = mode === 'mine' ? 'reviews' : 'mine';
-    return ages[key] ?? null;
-  }, [data, mode]);
 
   const formattedTime = data?.lastUpdated
     ? new Date(data.lastUpdated).toLocaleTimeString([], {
@@ -803,70 +700,18 @@ export function DashboardView({ mode }: { mode: Mode }) {
 
   return (
     <div className="min-h-dvh">
-      <header className="sticky top-0 z-chrome flex h-header items-center gap-3 border-b border-line/80 bg-surface/90 px-4 backdrop-blur-xl sm:px-6">
-        <div className="flex shrink-0 items-center gap-2.5">
-          <span aria-hidden className="relative block h-5 w-5 text-accent">
-            <span className="absolute left-1/2 top-0 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-current" />
-            <span className="absolute left-0 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-current" />
-            <span className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-current" />
-            <span className="absolute right-0 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-current" />
-            <span className="absolute bottom-0 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-current" />
-          </span>
-          <h1 className="font-display text-xl tracking-tight text-ink">PR Desk</h1>
-        </div>
-
-        <ModeSwitch mode={mode} activeCount={totalCount} otherAgeMs={otherAgeMs} />
-
-        <div className="relative ml-auto hidden min-w-0 max-w-sm flex-1 sm:block">
-          <Search
-            aria-hidden
-            className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-dim"
-          />
-          <input
-            type="text"
-            placeholder="Search"
-            aria-label="Search pull requests"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-lg border border-line bg-surface-raised py-2 pl-9 pr-3 text-sm text-ink shadow-sm placeholder:text-dim focus:border-line-strong focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
-          />
-        </div>
-
-        {data && (
-          <span className="hidden shrink-0 items-center gap-1.5 text-xs text-muted md:inline-flex">
-            <span
-              aria-hidden
-              className={`h-1.5 w-1.5 rounded-full ${
-                data.syncStatus === 'Healthy'
-                  ? 'bg-ready'
-                  : data.syncStatus === 'Syncing'
-                    ? 'bg-info animate-pulse-dot'
-                    : 'bg-danger'
-              }`}
-            />
-            {formattedTime ? `Updated ${formattedTime}` : data.syncStatus}
-          </span>
-        )}
-
-        <button
-          onClick={() => fetchDashboardState(true)}
-          disabled={refreshing || loading || busyCount > 0}
-          aria-label={busyCount > 0 ? 'Working on a pull request' : 'Refresh'}
-          title={
-            busyCount > 0
-              ? `Working on ${busyCount} pull request${busyCount === 1 ? '' : 's'}…`
-              : 'Refresh'
-          }
-          className="tap-safe shrink-0 rounded-lg border border-line bg-surface-raised p-2 text-muted shadow-sm transition-all duration-instant ease-out hover:-translate-y-px hover:border-line-strong hover:text-ink disabled:opacity-50"
-        >
-          <RefreshCw
-            aria-hidden
-            className={`h-4 w-4 ${refreshing || busyCount > 0 ? 'animate-spin text-accent' : ''}`}
-          />
-        </button>
-
-        <ThemeToggle />
-      </header>
+      <DashboardHeader
+        mode={mode}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        data={data}
+        totalCount={totalCount}
+        formattedTime={formattedTime}
+        refreshing={refreshing}
+        loading={loading}
+        busyCount={busyCount}
+        onRefresh={() => fetchDashboardState(true)}
+      />
 
       <div className="flex flex-col sm:flex-row">
         <Rail
@@ -979,139 +824,25 @@ export function DashboardView({ mode }: { mode: Mode }) {
             <>
               {activeView === 'done-recently' ? (
                 shownDoneRecently.length > 0 ? (
-                  <ul className="flex flex-col gap-3">
-                    {shownDoneRecently.map((item) => (
-                      <li
-                        key={`${item.id}-${item.completedAt}`}
-                        className="flex items-center gap-4 rounded-lg border border-line bg-surface px-5 py-4 shadow-sm"
-                      >
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ready-wash text-ready">
-                          <CheckCircle2 aria-hidden className="h-4 w-4" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <a
-                            href={item.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="font-semibold text-ink hover:text-accent"
-                          >
-                            {item.title}
-                          </a>
-                          <p className="mt-0.5 text-xs text-dim">
-                            {item.repository} · #{item.number} · {item.outcome}{' '}
-                            {new Date(item.completedAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <a
-                          href={item.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label={`Open pull request ${item.number} on GitHub`}
-                          className="rounded-full border border-line bg-surface-raised p-2 text-dim hover:text-ink"
-                        >
-                          <ExternalLink aria-hidden className="h-4 w-4" />
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
+                  <DoneRecentlyList items={shownDoneRecently} />
                 ) : (
-                  <div className="rounded-lg border border-line bg-surface px-6 py-16 text-center">
-                    <CheckCircle2 aria-hidden className="mx-auto h-6 w-6 text-ready" />
-                    <p className="mt-3 text-sm text-muted">
-                      {doneRecently.length > 0
-                        ? 'No completed pull requests match these filters.'
-                        : 'Nothing completed in the last 7 days.'}
-                    </p>
-                    <p className="mt-1 text-xs text-dim">
-                      {doneRecently.length > 0
-                        ? 'Clear the active search or repository filter to see the full history.'
-                        : 'Recently merged and closed pull requests from GitHub will appear here.'}
-                    </p>
-                  </div>
+                  <DoneRecentlyEmpty hasAny={doneRecently.length > 0} />
                 )
               ) : (
                 <>
                   {filteredPRs.length === 0 ? (
-                    <div className="rounded-md border border-line bg-surface px-6 py-16 text-center">
-                      <p className="text-sm text-muted">Nothing in {activeViewLabel}.</p>
-                      {selectedRepoSummary && selectedRepoSummary.hidden.length > 0 && (
-                        <div className="mt-3">
-                          <p className="text-sm text-dim">
-                            {selectedRepoSummary.hidden.length}{' '}
-                            {selectedRepoSummary.hidden.length === 1
-                              ? 'pull request is'
-                              : 'pull requests are'}{' '}
-                            hidden in {selectedRepoSummary.shortName}.
-                          </p>
-                          <button
-                            onClick={unhideSelectedRepo}
-                            className="tap-safe mt-3 rounded-md border border-line-control bg-surface-raised px-3 py-1.5 text-sm font-medium text-ink shadow-sm transition-colors duration-instant ease-out hover:border-line-strong"
-                          >
-                            Unhide {selectedRepoSummary.hidden.length}{' '}
-                            {selectedRepoSummary.hidden.length === 1 ? 'PR' : 'PRs'}
-                          </button>
-                        </div>
-                      )}
-                      {selectedRepoSummary &&
-                        selectedRepoSummary.visibleCount > 0 &&
-                        selectedRepoSummary.snoozedCount === selectedRepoSummary.visibleCount &&
-                        activeView !== 'snoozed' &&
-                        searchQuery.trim() === '' && (
-                          <div className="mt-3">
-                            <p className="text-sm text-dim">
-                              {selectedRepoSummary.snoozedCount}{' '}
-                              {selectedRepoSummary.snoozedCount === 1
-                                ? 'open pull request is'
-                                : 'open pull requests are'}{' '}
-                              snoozed in {selectedRepoSummary.shortName}.
-                            </p>
-                            <button
-                              onClick={() => setActiveView('snoozed')}
-                              className="tap-safe mt-3 rounded-md border border-line-control bg-surface-raised px-3 py-1.5 text-sm font-medium text-ink shadow-sm transition-colors duration-instant ease-out hover:border-line-strong"
-                            >
-                              View snoozed PRs
-                            </button>
-                          </div>
-                        )}
-                      {selectedRepoSummary &&
-                        selectedRepoSummary.visibleCount > 0 &&
-                        selectedRepoSummary.snoozedCount !== selectedRepoSummary.visibleCount &&
-                        activeView !== 'all' &&
-                        searchQuery.trim() === '' && (
-                          <div className="mt-3">
-                            <p className="text-sm text-dim">
-                              {selectedRepoSummary.visibleCount}{' '}
-                              {selectedRepoSummary.visibleCount === 1
-                                ? 'open pull request exists'
-                                : 'open pull requests exist'}{' '}
-                              in {selectedRepoSummary.shortName}, but none appear in{' '}
-                              {activeViewLabel}.
-                            </p>
-                            <button
-                              onClick={() => setActiveView('all')}
-                              className="tap-safe mt-3 rounded-md border border-line-control bg-surface-raised px-3 py-1.5 text-sm font-medium text-ink shadow-sm transition-colors duration-instant ease-out hover:border-line-strong"
-                            >
-                              Show open PRs
-                            </button>
-                          </div>
-                        )}
-                      {activeChips.length > 0 && (
-                        <>
-                          <p className="mt-1 text-sm text-dim">
-                            {filterSummary} {activeChips.length === 1 ? 'is' : 'are'} still on.
-                          </p>
-                          <button
-                            onClick={clearAllFilters}
-                            className="tap-safe mt-3 rounded-md border border-line-control bg-surface px-3 py-1.5 text-sm text-muted transition-colors duration-instant ease-out hover:text-ink"
-                          >
-                            Clear{' '}
-                            {activeChips.length === 1
-                              ? activeChips[0].label.toLowerCase()
-                              : 'filters'}
-                          </button>
-                        </>
-                      )}
-                    </div>
+                    <EmptyQueue
+                      activeView={activeView}
+                      activeViewLabel={activeViewLabel}
+                      selectedRepoSummary={selectedRepoSummary}
+                      onUnhideRepo={unhideSelectedRepo}
+                      onViewSnoozed={() => setActiveView('snoozed')}
+                      onShowAll={() => setActiveView('all')}
+                      activeChips={activeChips}
+                      filterSummary={filterSummary}
+                      onClearFilters={clearAllFilters}
+                      hasSearchQuery={searchQuery.trim() !== ''}
+                    />
                   ) : (
                     <PRCardList prs={filteredPRs} {...listProps} />
                   )}

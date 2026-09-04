@@ -15,8 +15,6 @@ import {
   FileText,
   GitBranch,
   GitMerge,
-  GitPullRequest,
-  GitPullRequestDraft,
   ListChecks,
   Loader2,
   MessageSquare,
@@ -35,8 +33,8 @@ import {
 import { blockedReason, getStatusRail, railBorders, railLabels } from '../../lib/status';
 import { EASE_OUT, FADE_IN } from '../../lib/motion';
 import { summarizeChecks } from '../../lib/checks';
-import { compactAge, longAge } from '../../lib/time';
 import { computeNew, recordSnapshot, recordVisit } from '../../lib/visited';
+import { PRStateIcon, TimePair } from './CardMeta';
 import { StatusChips } from './chips';
 import { ChecksPanel } from './ChecksPanel';
 import { ThreadsPanel } from './ThreadsPanel';
@@ -83,52 +81,6 @@ const REVERSE_TONE: Record<string, 'danger' | 'warn'> = {
 
 const ICON_BUTTON =
   'pointer-safe inline-flex shrink-0 items-center justify-center rounded-full border border-line bg-surface-raised p-1.5 text-dim shadow-sm transition-all duration-instant ease-out hover:-translate-y-px hover:border-line-strong hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
-
-function PRStateIcon({ pr }: { pr: PullRequestAssessment }) {
-  if (pr.isDraft) {
-    return (
-      <GitPullRequestDraft
-        aria-label="Draft pull request"
-        strokeWidth={2}
-        className="h-[18px] w-[18px] shrink-0 text-dim"
-      />
-    );
-  }
-  if (pr.isInMergeQueue) {
-    return (
-      <ListChecks
-        aria-label="In the merge queue"
-        strokeWidth={2}
-        className="h-[18px] w-[18px] shrink-0 text-queue"
-      />
-    );
-  }
-  return (
-    <GitPullRequest
-      aria-label={
-        pr.mergeability === 'Merge Conflicts' ? 'Pull request with conflicts' : 'Open pull request'
-      }
-      strokeWidth={2}
-      className={`h-[18px] w-[18px] shrink-0 ${
-        pr.mergeability === 'Merge Conflicts' ? 'text-danger' : 'text-queue'
-      }`}
-    />
-  );
-}
-
-function TimePair({ pr, force = false }: { pr: PullRequestAssessment; force?: boolean }) {
-  const stale = Date.now() - new Date(pr.updatedAt).getTime() > 7 * 86400 * 1000;
-  return (
-    <span
-      className={`${force ? 'flex' : 'hidden 2xl:flex'} shrink-0 flex-col items-end text-2xs leading-tight text-dim`}
-    >
-      <span title={`Opened ${longAge(pr.createdAt)}`}>Opened {compactAge(pr.createdAt)}</span>
-      <span title={`Updated ${longAge(pr.updatedAt)}`} className={stale ? 'text-warn' : undefined}>
-        Updated {compactAge(pr.updatedAt)}
-      </span>
-    </span>
-  );
-}
 
 export function PRCard({
   pr,
