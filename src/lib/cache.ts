@@ -1,3 +1,6 @@
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { PrActivityInfo, PullRequestAssessment, RecentPullRequest } from '../types/pr';
 import {
   executeRest,
@@ -54,8 +57,50 @@ const CACHE_TTL_MS = 25 * 1000; // 25s cache freshness window for 30s polling cy
 const ACTIVITY_TTL_MS = 5 * 60 * 1000; // per-PR timelines are heavy; refresh every 5 min
 const ACTIVITY_CONCURRENCY = 6;
 
-function emptyState(): ModeState {
-  return {
+function snapshotPath(mode: Mode): string {
+  const override = process.env.CACHE_SNAPSHOT_PATH?.trim();
+  const base = override || path.join(os.tmpdir(), 'pr-desk-cache');
+  return path.join(base, `${mode}.json`);
+}
+
+async function saveSnapshot(mode: Mode, cache: CacheState): Promise<void> {
+  try {
+    const file = snapshotPath(mode);
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(
+      file,
+      JSON.stringify({
+        prs: cache.prs,
+        recentPRs: cache.recentPRs,
+        lastUpdated: cache.lastUpdated,
+        matchedTotal: cache.matchedTotal,
+        savedAt: Date.now(),
+      }),
+    );
+  } catch {
+    // Snapshot is best-effort; a failed write must never fail the sync.
+  }
+}
+
+function loadSnapshotSync(mode: Mode): (Partial<CacheState> & { savedAt?: number }) | null {
+  try {
+    const override = process.env.CACHE_SNAPSHOT_PATH?.trim();
+    const base = override || path.join(os.tmpdir(), 'pr-desk-cache');
+    const file = path.join(base, `${mode}.json`);
+    // Sync read only at boot; sync path keeps startup simple and never blocks a request.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const req = require('node:fs') as typeof import('node:fs');
+    const raw = req.readFileSync(file, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.prs)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function emptyState(mode?: Mode): ModeState {
+  const base: ModeState = {
     cache: {
       prs: [],
       recentPRs: [],
@@ -73,12 +118,24 @@ function emptyState(): ModeState {
     activityFetchedAt: new Map(),
     activityInFlight: new Map(),
   };
+  if (!mode) return base;
+  const snap = loadSnapshotSync(mode);
+  if (snap) {
+    base.cache.prs = Array.isArray(snap.prs) ? snap.prs : [];
+    base.cache.recentPRs = Array.isArray(snap.recentPRs) ? snap.recentPRs : [];
+    base.cache.lastUpdated =
+      typeof snap.lastUpdated === 'string' ? snap.lastUpdated : base.cache.lastUpdated;
+    base.cache.matchedTotal =
+      typeof snap.matchedTotal === 'number' ? snap.matchedTotal : base.cache.prs.length;
+    if (typeof snap.savedAt === 'number') base.lastSyncTimestamp = snap.savedAt;
+  }
+  return base;
 }
 
 // One cache slot per mode. Survives hot reload in development.
 const globalForCache = globalThis as unknown as { prModeStates?: Map<Mode, ModeState> };
 const modeStates: Map<Mode, ModeState> =
-  globalForCache.prModeStates ?? new Map(MODES.map((m) => [m, emptyState()]));
+  globalForCache.prModeStates ?? new Map(MODES.map((m) => [m, emptyState(m)]));
 if (process.env.NODE_ENV !== 'production') {
   globalForCache.prModeStates = modeStates;
 }
@@ -86,7 +143,7 @@ if (process.env.NODE_ENV !== 'production') {
 function stateFor(mode: Mode): ModeState {
   let st = modeStates.get(mode);
   if (!st) {
-    st = emptyState();
+    st = emptyState(mode);
     modeStates.set(mode, st);
   }
   // A hot reload can hand back a state built by an earlier shape of this module.
@@ -357,6 +414,7 @@ export async function getDashboardState(mode: Mode, forceRefresh = false): Promi
         partial: failures.length > 0,
       };
       st.lastSyncTimestamp = Date.now();
+      void saveSnapshot(mode, st.cache);
       prEventEmitter.emit(mode);
       return st.cache;
     } catch (err: any) {

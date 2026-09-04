@@ -172,7 +172,7 @@ The inspector starts with a **Since you last looked** digest. GitHub timeline ac
 new comments, reviews and commits; a browser-local snapshot adds check, review, mergeability and
 thread-count transitions. The snapshot is recorded only after the digest is computed.
 
-Keyboard controls operate the current queue: `J`/`K` move, `1`–`4` select inspector tabs, `G`
+Keyboard controls operate the current queue: `J`/`K` move, `1`–`5` select inspector tabs, `G`
 opens GitHub, `S` snoozes, `H` hides, `R` refreshes, and `⌘K` or `?` opens the command palette.
 
 - **Description** — `bodyHTML`, GitHub's own rendered and sanitized markdown, so issue refs

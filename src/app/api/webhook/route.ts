@@ -32,8 +32,6 @@ export async function POST(req: NextRequest) {
       'status',
     ];
 
-    console.log(`[Webhook] Received GitHub event: ${event}`);
-
     const shouldInvalidate = relevantEvents.includes(event) || event === 'unknown';
     if (shouldInvalidate) {
       refreshAllModes().catch((err) => {

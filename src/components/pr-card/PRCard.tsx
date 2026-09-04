@@ -36,19 +36,33 @@ import { summarizeChecks } from '../../lib/checks';
 import { computeNew, recordSnapshot, recordVisit } from '../../lib/visited';
 import { PRStateIcon, TimePair } from './CardMeta';
 import { StatusChips } from './chips';
-import { ChecksPanel } from './ChecksPanel';
-import { ThreadsPanel } from './ThreadsPanel';
-import { DescriptionPanel } from './DescriptionPanel';
-import { MergeQueuePanel } from './MergeQueuePanel';
+import dynamic from 'next/dynamic';
+const ChecksPanel = dynamic(() => import('./ChecksPanel').then((m) => m.ChecksPanel), {
+  loading: () => <p className="px-5 py-4 text-sm text-muted">Loading checks…</p>,
+});
+const ThreadsPanel = dynamic(() => import('./ThreadsPanel').then((m) => m.ThreadsPanel), {
+  loading: () => <p className="px-5 py-4 text-sm text-muted">Loading threads…</p>,
+});
+const DescriptionPanel = dynamic(
+  () => import('./DescriptionPanel').then((m) => m.DescriptionPanel),
+  { loading: () => <p className="px-5 py-4 text-sm text-muted">Loading description…</p> },
+);
+const MergeQueuePanel = dynamic(() => import('./MergeQueuePanel').then((m) => m.MergeQueuePanel), {
+  loading: () => <p className="px-5 py-4 text-sm text-muted">Loading merge queue…</p>,
+});
+const DiffPanel = dynamic(() => import('./DiffPanel').then((m) => m.DiffPanel), {
+  loading: () => <p className="px-5 py-4 text-sm text-muted">Loading changed files…</p>,
+});
 import { ActionButton, CountPill, DiffBar, DiffStat, SplitButton, type MenuItem } from './ui';
 
-export type TabId = 'description' | 'queue' | 'checks' | 'threads';
+export type TabId = 'description' | 'queue' | 'checks' | 'threads' | 'files';
 
 const TABS: { id: TabId; label: string; icon: typeof ListChecks }[] = [
   { id: 'description', label: 'Description', icon: FileText },
   { id: 'queue', label: 'Merge queue', icon: Train },
   { id: 'checks', label: 'Checks', icon: ListChecks },
   { id: 'threads', label: 'Threads', icon: MessageSquare },
+  { id: 'files', label: 'Files', icon: FileText },
 ];
 
 const ACTION_ICON: Record<
@@ -459,11 +473,13 @@ export function PRCard({
               </div>
 
               {/*
-                Description takes the whole card, because prose needs the width. Checks and
-                threads sit side by side once there is room for both.
+                Description and files take the whole card, because prose and diffs need the width.
+                Checks and threads sit side by side once there is room for both.
               */}
               {tab === 'description' ? (
                 <DescriptionPanel pr={pr} />
+              ) : tab === 'files' ? (
+                <DiffPanel pr={pr} />
               ) : (
                 <div className="grid grid-cols-1 divide-y divide-line xl:grid-cols-2 xl:divide-x xl:divide-y-0">
                   {/* The left pane is whichever of queue or checks the tab selects. */}

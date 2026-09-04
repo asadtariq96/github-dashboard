@@ -72,9 +72,13 @@ export function getRecentSearchQueries(mode: Mode, since: string): string[] {
  * 50 nodes — measured 502s starting at 15 for an account with heavy PRs, stable at 10.
  * `searchAllPullRequests` pages through the rest with the search cursor, so this only
  * needs to be small enough for one page to resolve, not large enough to cover a result set.
+ * Capped at 10: a larger single page reintroduces the edge 502s this paging was built to avoid.
  */
 export function getPageSize(_mode: Mode): number {
   const raw = Number(process.env.GITHUB_PAGE_SIZE);
-  if (Number.isFinite(raw) && raw > 0) return Math.min(raw, 50);
+  if (Number.isFinite(raw) && raw > 0) return Math.min(raw, 10);
   return 10;
 }
+
+export const SEARCH_MAX_PAGES = 10;
+export const SEARCH_MAX_RESULTS = SEARCH_MAX_PAGES * 10;

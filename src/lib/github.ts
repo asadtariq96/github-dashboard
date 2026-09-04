@@ -458,15 +458,16 @@ interface RecentPrSearchPage {
 /**
  * The nested review-thread/checks fields make each node expensive to resolve, so a
  * single wide page (e.g. 50 nodes) times out at GitHub's edge with a 502 well before
- * the response is ready. `first` stays small and safe; this walks the cursor to collect
- * every match instead, stopping at `maxPages` so one huge search can't stall a refresh
- * indefinitely.
+ * the response is ready. `first` stays small and safe (capped at 10); this walks the
+ * cursor to collect every match instead, stopping at `maxPages` so one huge search
+ * can't stall a refresh indefinitely. 10 pages x 10 nodes = up to 100 PRs per query.
  */
 export async function searchAllPullRequests(
   query: string,
   first: number,
-  maxPages = 6,
+  maxPages = 10,
 ): Promise<{ issueCount: number; nodes: any[]; truncated: boolean }> {
+  const safeFirst = Math.max(1, Math.min(first || 10, 10));
   const nodes: any[] = [];
   let issueCount = 0;
   let after: string | undefined;
@@ -474,7 +475,11 @@ export async function searchAllPullRequests(
   let pages = 0;
 
   while (hasNextPage && pages < maxPages) {
-    const data = await executeGraphQL<PrSearchPage>(PRS_GRAPHQL_QUERY, { query, first, after });
+    const data = await executeGraphQL<PrSearchPage>(PRS_GRAPHQL_QUERY, {
+      query,
+      first: safeFirst,
+      after,
+    });
     issueCount = data?.search?.issueCount || 0;
     nodes.push(...(data?.search?.nodes || []));
     hasNextPage = data?.search?.pageInfo?.hasNextPage ?? false;

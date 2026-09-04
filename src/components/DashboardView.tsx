@@ -455,6 +455,27 @@ export function DashboardView({ mode }: { mode: Mode }) {
     'rerun-checks': { doing: 'Re-running checks on', did: 'Re-ran checks on' },
   };
 
+  const BATCH_LABEL: Partial<Record<RowActionId, string>> = {
+    'update-branch': 'Update branches',
+    'rerun-checks': 'Re-run checks',
+  };
+
+  const handleRunBatch = (action: RowActionId, prs: PullRequestAssessment[]) => {
+    if (batchRunning) return;
+    const label = BATCH_LABEL[action] ?? 'Run batch';
+    const preview = prs
+      .slice(0, 5)
+      .map((pr) => `#${pr.number}`)
+      .join(', ');
+    const more = prs.length > 5 ? ` and ${prs.length - 5} more` : '';
+    setConfirm({
+      title: `${label} on ${prs.length} pull request${prs.length === 1 ? '' : 's'}?`,
+      detail: `${preview}${more}\n\nRuns 4 at a time to stay under GitHub's rate limit.`,
+      confirmLabel: label,
+      run: () => runBatch(action, prs),
+    });
+  };
+
   const runBatch = async (action: RowActionId, prs: PullRequestAssessment[]) => {
     if (batchRunning) return;
     const words = BATCH_WORDS[action] ?? { doing: 'Working on', did: 'Finished' };
@@ -861,7 +882,7 @@ export function DashboardView({ mode }: { mode: Mode }) {
           lastPickedId.current = null;
         }}
         onClear={clearSelection}
-        onRunBatch={(action, prs) => void runBatch(action, prs)}
+        onRunBatch={(action, prs) => handleRunBatch(action, prs)}
         onHideAll={hideSelected}
         running={batchRunning}
       />

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isAuthorized, unauthorized } from '../../../../lib/apiAuth';
 import {
   executeGraphQL,
   RESOLVE_THREAD_MUTATION,
@@ -9,6 +10,7 @@ import { refreshAllModes } from '../../../../lib/cache';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
+  if (!isAuthorized(req)) return unauthorized();
   try {
     const { threadId, resolved = true } = await req.json();
     if (!threadId) {

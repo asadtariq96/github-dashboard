@@ -67,6 +67,7 @@ export function PRCardList({
   const [activeTab, setActiveTab] = useState<TabId>('checks');
   const [digests, setDigests] = useState<Record<string, ChangeDigest>>({});
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(50);
   const [masterPercent, setMasterPercent] = useState(43);
   const [resizing, setResizing] = useState(false);
   const masterPercentRef = useRef(43);
@@ -103,6 +104,12 @@ export function PRCardList({
   useEffect(() => {
     if (activeId && !prs.some((pr) => pr.id === activeId)) setActiveId(null);
   }, [activeId, prs]);
+
+  useEffect(() => {
+    setVisibleCount(50);
+  }, [prs.length]);
+
+  const visiblePRs = prs.slice(0, visibleCount);
 
   const inspect = useCallback(
     (pr: PullRequestAssessment) => {
@@ -197,10 +204,10 @@ export function PRCardList({
       else if (key === 'h' && activePR) onToggleHidePR?.(activePR.id);
       else if (key === 's' && activePR) onSnooze?.(activePR, Date.now() + 24 * 60 * 60 * 1000);
       else if (key === 'r') void onRefresh?.();
-      else if (activePR && ['1', '2', '3', '4'].includes(key)) {
+      else if (activePR && ['1', '2', '3', '4', '5'].includes(key)) {
         const tabs: TabId[] = activePR.isInMergeQueue
-          ? ['description', 'queue', 'checks', 'threads']
-          : ['description', 'checks', 'threads'];
+          ? ['description', 'queue', 'checks', 'threads', 'files']
+          : ['description', 'checks', 'threads', 'files'];
         const next = tabs[Number(key) - 1];
         if (next) setActiveTab(next);
       } else return;
@@ -235,7 +242,7 @@ export function PRCardList({
       >
         <ul className="flex min-w-0 flex-col gap-4">
           <AnimatePresence mode="popLayout">
-            {prs.map((pr, i) => (
+            {visiblePRs.map((pr, i) => (
               <motion.li
                 key={pr.id}
                 layout="position"
@@ -272,6 +279,16 @@ export function PRCardList({
             ))}
           </AnimatePresence>
         </ul>
+        {visibleCount < prs.length && (
+          <button
+            type="button"
+            onClick={() => setVisibleCount((n) => n + 50)}
+            className="mt-4 w-full rounded-lg border border-line bg-surface px-4 py-2.5 text-sm font-medium text-muted shadow-sm transition-colors hover:border-line-strong hover:text-ink"
+          >
+            Show {Math.min(50, prs.length - visibleCount)} more of {prs.length - visibleCount}{' '}
+            remaining
+          </button>
+        )}
 
         <div
           role={activePR ? 'separator' : undefined}
@@ -339,7 +356,7 @@ export function PRCardList({
             >
               <div className="mb-2 flex items-center gap-2 px-1">
                 <Keyboard aria-hidden className="h-3.5 w-3.5 text-dim" />
-                <span className="text-xs text-dim">J/K navigate · 1–4 tabs · ⌘K commands</span>
+                <span className="text-xs text-dim">J/K navigate · 1–5 tabs · ⌘K commands</span>
                 <button
                   onClick={() => setActiveId(null)}
                   aria-label="Close inspector"

@@ -122,7 +122,7 @@ Shortcuts are disabled while focus is in an input, textarea, select, or editable
 |---|---|
 | `J` / `K` | Move to the next / previous PR |
 | `Enter` | Inspect the first PR when no inspector is open |
-| `1`–`4` | Switch inspector tabs |
+| `1`–`5` | Switch inspector tabs |
 | `G` | Open the inspected PR on GitHub |
 | `S` | Snooze the inspected PR until tomorrow |
 | `H` | Hide the inspected PR |

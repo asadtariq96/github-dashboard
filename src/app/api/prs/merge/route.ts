@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isAuthorized, unauthorized } from '../../../../lib/apiAuth';
 import { executeGraphQL, MERGE_PR_MUTATION, ENQUEUE_PR_MUTATION } from '../../../../lib/github';
 import { refreshAllModes } from '../../../../lib/cache';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
+  if (!isAuthorized(req)) return unauthorized();
   try {
     const body = await req.json();
     const { prId, enqueue = false, mergeMethod = 'SQUASH' } = body;
