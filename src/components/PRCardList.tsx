@@ -72,7 +72,16 @@ export function PRCardList({
   const [resizing, setResizing] = useState(false);
   const masterPercentRef = useRef(43);
   const resizingRef = useRef(false);
+  const dragRectRef = useRef<DOMRect | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const pendingXRef = useRef(0);
   const workspaceRef = useRef<HTMLDivElement>(null);
+  useEffect(
+    () => () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    },
+    [],
+  );
   const firstPass = useRef(true);
   useEffect(() => {
     firstPass.current = false;
@@ -133,21 +142,44 @@ export function PRCardList({
     [activeId, inspect, prs],
   );
 
-  const updateSplit = (clientX: number) => {
-    const rect = workspaceRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const maxForAvailableWidth = maxMasterPercent(rect.width);
+  /*
+   * A drag writes the CSS variable straight to the node. Going through state would
+   * re-render the whole queue and the inspector on every pointer event, and the
+   * geometry is measured once on pointer down so no move reads layout back.
+   *
+   * One column change costs more than a frame's budget to lay out, so moves are
+   * coalesced and at most one lands per frame.
+   */
+  const applySplit = (clientX: number) => {
+    const workspace = workspaceRef.current;
+    const rect = dragRectRef.current ?? workspace?.getBoundingClientRect();
+    if (!workspace || !rect) return;
     const next = Math.max(
       MIN_MASTER_PERCENT,
-      Math.min(maxForAvailableWidth, ((clientX - rect.left) / rect.width) * 100),
+      Math.min(maxMasterPercent(rect.width), ((clientX - rect.left) / rect.width) * 100),
     );
     masterPercentRef.current = next;
-    setMasterPercent(next);
+    workspace.style.setProperty('--master-width', `${next}%`);
+  };
+
+  const updateSplit = (clientX: number) => {
+    pendingXRef.current = clientX;
+    if (rafRef.current !== null) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      applySplit(pendingXRef.current);
+    });
   };
 
   const commitSplit = (next = masterPercentRef.current) => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
     resizingRef.current = false;
+    dragRectRef.current = null;
     setResizing(false);
+    setMasterPercent(next);
     try {
       localStorage.setItem(SPLIT_STORAGE_KEY, String(next));
     } catch {}
@@ -310,6 +342,7 @@ export function PRCardList({
               event.preventDefault();
               event.currentTarget.setPointerCapture(event.pointerId);
               resizingRef.current = true;
+              dragRectRef.current = workspaceRef.current?.getBoundingClientRect() ?? null;
               setResizing(true);
               updateSplit(event.clientX);
             }}
@@ -335,7 +368,6 @@ export function PRCardList({
                 Math.min(availableMax, masterPercent + (event.key === 'ArrowRight' ? 2 : -2)),
               );
               masterPercentRef.current = next;
-              setMasterPercent(next);
               commitSplit(next);
             }}
             className="group hidden cursor-col-resize items-center justify-center outline-none xl:flex xl:self-stretch"
@@ -359,9 +391,7 @@ export function PRCardList({
               transition={{ duration: 0.16, ease: EASE_OUT }}
               className="scroll-region fixed inset-x-3 bottom-3 z-drawer max-h-[85dvh] min-w-0 overflow-y-auto rounded-lg bg-canvas p-2 shadow-float xl:static xl:z-auto xl:flex xl:h-full xl:max-h-none xl:min-h-0 xl:flex-col xl:overflow-hidden xl:rounded-none xl:bg-transparent xl:p-0 xl:pr-1 xl:shadow-none"
             >
-              <div className="mb-2 flex items-center gap-2 px-1">
-                <Keyboard aria-hidden className="h-3.5 w-3.5 text-dim" />
-                <span className="text-xs text-dim">J/K navigate · 1–5 tabs · ⌘K commands</span>
+              <div className="mb-2 flex items-center px-1">
                 <button
                   onClick={() => setActiveId(null)}
                   aria-label="Close inspector"

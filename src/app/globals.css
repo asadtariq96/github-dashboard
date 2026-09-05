@@ -481,6 +481,22 @@
 }
 
 @layer utilities {
+  /*
+   * Laying out the rows scrolled out of sight is what makes dragging the inspector
+   * wider drop frames, so the browser skips them until they scroll in. The estimate
+   * must be close to the real row height: too low and the guessed scroll height
+   * churns every frame, which costs more than it saves.
+   */
+  .defer-row {
+    content-visibility: auto;
+    contain-intrinsic-size: auto var(--row-estimate, 48px);
+  }
+
+  .defer-block {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 320px;
+  }
+
   .bg-grid {
     background-image:
       linear-gradient(var(--grid-line) 1px, transparent 1px),
