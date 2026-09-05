@@ -1,19 +1,6 @@
 import { PullRequestAssessment } from '../types/pr';
 import type { Mode } from './config';
 
-export type StatusRail = 'urgent' | 'ready' | 'queue' | 'draft' | 'neutral';
-
-export function getStatusRail(pr: PullRequestAssessment): StatusRail {
-  if (pr.mergeQueueInfo?.isWaitingForApproval) return 'urgent';
-  if (queueFailed(pr)) return 'urgent';
-  if (pr.needsAttention || pr.checks === 'Failing' || pr.review === 'Changes Requested')
-    return 'urgent';
-  if (pr.mergeability === 'Ready to Merge' && !pr.isInMergeQueue && !pr.isDraft) return 'ready';
-  if (pr.isInMergeQueue) return 'queue';
-  if (pr.isDraft) return 'draft';
-  return 'neutral';
-}
-
 /** The queue gave up on this entry. It needs a person, not more waiting. */
 export function queueFailed(pr: PullRequestAssessment): boolean {
   const state = pr.mergeQueueInfo?.state;
@@ -38,23 +25,6 @@ export function queueProgressLabel(pr: PullRequestAssessment): string | null {
   if (state === 'LOCKED') return 'Merge queue is locked';
   return QUEUE_WORKING_LABEL[state] ?? 'In the merge queue';
 }
-
-/** The severity rail, drawn as the card's left edge. */
-export const railBorders: Record<StatusRail, string> = {
-  urgent: 'border-l-danger',
-  ready: 'border-l-ready',
-  queue: 'border-l-queue',
-  draft: 'border-l-dim',
-  neutral: 'border-l-line-strong',
-};
-
-export const railLabels: Record<StatusRail, string> = {
-  urgent: 'Needs attention',
-  ready: 'Ready to merge',
-  queue: 'In the merge queue',
-  draft: 'Draft',
-  neutral: 'In progress',
-};
 
 export function primaryLabel(pr: PullRequestAssessment): string | null {
   if (pr.mergeQueueInfo?.isWaitingForApproval) return 'Needs approval';

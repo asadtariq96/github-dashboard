@@ -30,7 +30,7 @@ import {
   type RowAction,
   type RowActionId,
 } from '../../lib/rowAction';
-import { blockedReason, getStatusRail, railBorders, railLabels } from '../../lib/status';
+import { blockedReason } from '../../lib/status';
 import { EASE_OUT, FADE_IN } from '../../lib/motion';
 import { summarizeChecks } from '../../lib/checks';
 import { computeNew, recordSnapshot, recordVisit } from '../../lib/visited';
@@ -157,7 +157,6 @@ export function PRCard({
 
   const prKey = `${pr.repository.nameWithOwner}#${pr.number}`;
   const newActivity = computeNew(activity, prKey);
-  const rail = getStatusRail(pr);
   const blocked = blockedReason(mode, pr);
   const { total: checkTotal } = summarizeChecks(pr);
   const threadTotal = pr.unresolvedThreads.length;
@@ -192,21 +191,14 @@ export function PRCard({
       className={`overflow-hidden rounded-lg border bg-surface shadow-sm transition-all duration-fast ease-out ${
         fillAvailable ? 'h-full' : ''
       } ${
-        selected
-          ? 'border-accent ring-2 ring-accent/20'
-          : inspected
-            ? 'border-accent-border bg-accent-wash/30 ring-2 ring-accent/10'
-            : isExpanded
-              ? 'border-line-strong shadow-md'
-              : 'border-line hover:border-line-strong hover:shadow-md'
+        selected || inspected
+          ? 'border-accent shadow-md'
+          : isExpanded
+            ? 'border-line-strong shadow-md'
+            : 'border-line hover:border-line-strong hover:shadow-md'
       }`}
     >
-      <div
-        title={railLabels[rail]}
-        className={`border-l-[3px] ${railBorders[rail]} ${
-          fillAvailable ? 'flex h-full min-h-0 flex-col' : ''
-        }`}
-      >
+      <div className={fillAvailable ? 'flex h-full min-h-0 flex-col' : ''}>
         <div
           onClick={handleToggle}
           className={`flex cursor-pointer select-none items-center gap-4 px-5 py-4 transition-colors duration-instant ease-out hover:bg-surface-hover ${
@@ -484,36 +476,30 @@ export function PRCard({
                 </div>
               </div>
 
-              {/*
-                Description and files take the whole card, because prose and diffs need the width.
-                Checks and threads sit side by side once there is room for both.
-              */}
+              {/* One tab, one panel, the whole width. The panel scrolls itself when it fills. */}
               <div
                 className={
-                  fillAvailable ? 'scroll-region min-h-0 flex-1 overflow-y-auto' : 'min-h-0'
+                  fillAvailable ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : 'min-h-0'
                 }
               >
                 {tab === 'description' ? (
-                  <DescriptionPanel pr={pr} />
+                  <DescriptionPanel pr={pr} fill={fillAvailable} />
                 ) : tab === 'files' ? (
-                  <DiffPanel pr={pr} />
+                  <DiffPanel pr={pr} fill={fillAvailable} />
+                ) : tab === 'queue' ? (
+                  <MergeQueuePanel pr={pr} fill={fillAvailable} />
+                ) : tab === 'checks' ? (
+                  <ChecksPanel pr={pr} fill={fillAvailable} />
                 ) : (
-                  <div className="grid grid-cols-1 divide-y divide-line xl:grid-cols-2 xl:divide-x xl:divide-y-0">
-                    {/* The left pane is whichever of queue or checks the tab selects. */}
-                    <div className={tab === 'queue' || tab === 'checks' ? '' : 'hidden xl:block'}>
-                      {tab === 'queue' ? <MergeQueuePanel pr={pr} /> : <ChecksPanel pr={pr} />}
-                    </div>
-                    <div className={tab === 'threads' ? '' : 'hidden xl:block'}>
-                      <ThreadsPanel
-                        pr={pr}
-                        unreadSinceMs={
-                          newActivity.thresholdTs ? new Date(newActivity.thresholdTs).getTime() : 0
-                        }
-                        onChanged={onRefresh ?? (() => undefined)}
-                        openFirst={openFirstThread}
-                      />
-                    </div>
-                  </div>
+                  <ThreadsPanel
+                    pr={pr}
+                    unreadSinceMs={
+                      newActivity.thresholdTs ? new Date(newActivity.thresholdTs).getTime() : 0
+                    }
+                    onChanged={onRefresh ?? (() => undefined)}
+                    openFirst={openFirstThread}
+                    fill={fillAvailable}
+                  />
                 )}
               </div>
 
