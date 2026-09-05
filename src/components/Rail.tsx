@@ -163,9 +163,19 @@ export function countViews(
 }
 
 const ITEM_BASE =
-  'tap-safe flex w-full items-center gap-2.5 overflow-hidden rounded-lg border px-2 py-2 text-sm transition-all duration-instant ease-out lg:px-3';
+  'tap-safe flex w-full items-center overflow-hidden rounded-lg border px-2 py-2 text-sm transition-all duration-instant ease-out';
 const ITEM_ON = 'border-accent-border bg-accent-wash font-medium text-accent shadow-sm';
 const ITEM_OFF = 'border-transparent text-muted hover:border-line hover:bg-surface hover:text-ink';
+
+/**
+ * The icon rail carries no label, so the row must centre what is left. A gap between
+ * an icon and a zero-width label still occupies space, which pushes the icon off centre.
+ */
+function itemLayout(collapsed: boolean): string {
+  return collapsed
+    ? 'gap-2.5 sm:justify-center sm:gap-0'
+    : 'gap-2.5 sm:justify-center sm:gap-0 lg:justify-start lg:gap-2.5 lg:px-3';
+}
 
 /**
  * Labels show on the mobile strip and on the wide rail. The 56px icon rail hides them.
@@ -235,6 +245,7 @@ export function Rail({
   const showRepos = repositories.length > 1;
   const LABEL_VIS = labelVis(collapsed);
   const COUNT_VIS = countVis(collapsed);
+  const ITEM_LAYOUT = itemLayout(collapsed);
   const width = collapsed ? 'sm:w-rail-collapsed' : 'sm:w-rail-collapsed lg:w-rail';
 
   return (
@@ -272,7 +283,7 @@ export function Rail({
                 aria-current={active ? 'page' : undefined}
                 aria-label={`${label}, ${n} pull request${n === 1 ? '' : 's'}`}
                 title={label}
-                className={`${ITEM_BASE} ${active ? ITEM_ON : ITEM_OFF}`}
+                className={`${ITEM_BASE} ${ITEM_LAYOUT} ${active ? ITEM_ON : ITEM_OFF}`}
               >
                 <ShownIcon
                   aria-hidden
@@ -306,7 +317,7 @@ export function Rail({
                 aria-current={selectedRepo === 'all' ? 'true' : undefined}
                 aria-label={`All repositories, ${totalCount} pull requests`}
                 title="All repositories"
-                className={`${ITEM_BASE} ${selectedRepo === 'all' ? ITEM_ON : ITEM_OFF}`}
+                className={`${ITEM_BASE} ${ITEM_LAYOUT} ${selectedRepo === 'all' ? ITEM_ON : ITEM_OFF}`}
               >
                 <FolderGit2 aria-hidden strokeWidth={1.5} className="h-4 w-4 shrink-0" />
                 <span className={`${LABEL_VIS} truncate`}>All repos</span>
@@ -327,7 +338,7 @@ export function Rail({
                     aria-current={active ? 'true' : undefined}
                     aria-label={`${repo}, ${n} pull request${n === 1 ? '' : 's'}`}
                     title={repo}
-                    className={`${ITEM_BASE} ${active ? ITEM_ON : ITEM_OFF}`}
+                    className={`${ITEM_BASE} ${ITEM_LAYOUT} ${active ? ITEM_ON : ITEM_OFF}`}
                   >
                     <Folder aria-hidden strokeWidth={1.5} className="h-4 w-4 shrink-0" />
                     <span className={`${LABEL_VIS} truncate font-mono text-xs`}>{short}</span>
