@@ -83,8 +83,8 @@ A bordered label rendered only when an active blocker, milestone, or notable sta
 _Avoid_: Badge, pill, static column badge
 
 **Severity Edge**:
-The 3px coloured left border of a PR card, encoding how urgent it is against the cards above and below it.
-_Avoid_: Rail, stripe, accent bar
+The former 3px coloured left border of a PR card. It was removed. Urgency now reads from the sort order, the state icon and the status chips.
+_Avoid_: Using this term for the current interface
 
 **Primary Action**:
 The single action a PR card shows, chosen from the ordered list in `allActionsFor`. Actions that undo progress, closing and dequeuing, are excluded from that list and can never appear here.

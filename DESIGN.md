@@ -117,13 +117,12 @@ does not fit the 40px a dense row would want, and that is the trade the layout m
 narrow master column, title readability takes priority and status wraps below it.
 
 ```
-▌ ▾ ⑂  Add streaming support to event bus consumer   #2457      +312 −48 ▬▬  ⊘ 18/21 ●2  ⌸ 7     Opened 3w ago    [ Add to queue ▾ ]
+  ▾ ⑂  Add streaming support to event bus consumer   #2457      +312 −48 ▬▬  ⊘ 18/21 ●2  ⌸ 7     Opened 3w ago    [ Add to queue ▾ ]
        ▤ unity/gateway-api · ⑂ feat/streaming → main                                              Updated 1h ago
-▲ 3px severity edge
 ```
 
-Left to right: severity edge, selection checkbox, chevron, state icon, title with number
-chip, diff and its bar, status chips, both timestamps, unread count, one primary action.
+Left to right: selection checkbox, chevron, state icon, title with number chip, diff and its
+bar, status chips, both timestamps, unread count, one primary action.
 
 **Status is never carried by colour alone.** Every chip has a word or an icon.
 
@@ -135,8 +134,8 @@ unresolved threads, Changes requested, Stacked.
 ago is healthy. Opened 3 weeks ago and untouched for two is dead. Updated turns amber past
 seven days.
 
-**The severity edge** is 3px on the card's left border: danger, ready, queue, draft, or a
-neutral strong line.
+**The card carries no coloured edge.** Urgency reads from the sort order, the state icon and
+the chips, each of which names its state in words.
 
 ### The primary action
 
@@ -160,13 +159,22 @@ shows **View queue**. Otherwise a card with no action shows **Review**.
 
 Selecting a row opens a persistent right-side inspector without moving the queue. On desktop,
 the divider is resizable from 32–60% (while preserving at least 480px for the inspector), is
-keyboard adjustable, and remembers its width in the browser. Queue cards retain every summary
+keyboard adjustable, and remembers its width in the browser. A drag writes the width straight to
+a CSS custom property on the node, coalesced to one write per frame; state is set only on release.
+Routing a drag through React state re-renders the queue and the whole inspector on every pointer
+event, which is what makes a resize feel sluggish. Queue cards retain every summary
 field and reflow them onto additional rows as the master column narrows. The inspector shell is
 stable while navigating between PRs, avoiding a repeated entrance animation; opening and closing
 animate the grid tracks directly. Below the desktop breakpoint it becomes a bounded bottom drawer.
-A queued pull request opens on **Merge queue**; everything else opens on **Checks**. Description
-takes the full card width because prose needs it; Checks and Threads sit side by side when there is
-room.
+A queued pull request opens on **Merge queue**; everything else opens on **Checks**. Every tab
+shows one panel across the full width, and the tabs are the only way between them. A panel that
+fills the inspector scrolls itself, so the tab body never scrolls inside another scroller.
+
+**Files** puts a file tree beside the diffs. Its rows are 24px, it collapses to give the diff the
+whole width, and the divider between the two drags from 150px to 520px, never past half the panel.
+The width is remembered in the browser. Set the row height with `itemHeight`, never with the
+`compact` density preset, whose 0.8 factor breaks the container query that hides the truncation
+ellipsis, so that every name reports as too long.
 
 The inspector starts with a **Since you last looked** digest. GitHub timeline activity supplies
 new comments, reviews and commits; a browser-local snapshot adds check, review, mergeability and
