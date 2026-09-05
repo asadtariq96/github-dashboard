@@ -13,7 +13,14 @@ import {
 import type { PullRequestAssessment, ReviewThreadItem } from '../../types/pr';
 import { compactAge } from '../../lib/time';
 import { Avatar, CountPill } from './ui';
-import { ICON_BUTTON, PANEL_EMPTY, PANEL_HEAD, PANEL_LINK, PANEL_SCROLLER } from './panelChrome';
+import {
+  ICON_BUTTON,
+  PANEL_EMPTY,
+  PANEL_HEAD,
+  PANEL_LINK,
+  panelRoot,
+  panelScroller,
+} from './panelChrome';
 
 async function post(url: string, body: unknown): Promise<void> {
   const res = await fetch(url, {
@@ -149,7 +156,7 @@ function ThreadCard({
   };
 
   return (
-    <li>
+    <li className="defer-row" style={{ '--row-estimate': '96px' } as React.CSSProperties}>
       <div className="px-3 py-2.5">
         <div className="flex items-center gap-2">
           <Avatar name={thread.author} src={thread.authorAvatarUrl} />
@@ -279,6 +286,7 @@ export function ThreadsPanel({
   unreadSinceMs,
   onChanged,
   openFirst = false,
+  fill = false,
 }: {
   pr: PullRequestAssessment;
   /** Threads newer than this are marked unread. 0 marks nothing. */
@@ -286,9 +294,10 @@ export function ThreadsPanel({
   /** Awaited, so a spinner covers the refresh as well as the write. */
   onChanged: () => Promise<void> | void;
   openFirst?: boolean;
+  fill?: boolean;
 }) {
   return (
-    <section className="min-w-0 p-4">
+    <section className={panelRoot(fill)}>
       <header className={PANEL_HEAD}>
         <span className="font-bold text-ink">Unresolved threads</span>
         <CountPill>{pr.unresolvedThreads.length}</CountPill>
@@ -305,7 +314,7 @@ export function ThreadsPanel({
       {pr.unresolvedThreads.length === 0 ? (
         <p className={PANEL_EMPTY}>Every review thread is resolved.</p>
       ) : (
-        <ul className={PANEL_SCROLLER}>
+        <ul className={panelScroller(fill)}>
           {pr.unresolvedThreads.map((thread, i) => (
             <ThreadCard
               key={thread.id}

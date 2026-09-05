@@ -3,15 +3,21 @@
 import React from 'react';
 import { ExternalLink } from 'lucide-react';
 import type { PullRequestAssessment } from '../../types/pr';
-import { PANEL_HEAD, PANEL_LINK } from './panelChrome';
+import { PANEL_HEAD, PANEL_LINK, panelRoot } from './panelChrome';
 
 /**
  * `bodyHTML` is GitHub's own rendered, sanitized markdown, so it resolves `#123` and
  * `@mentions` against the repository the way the site does.
  */
-export function DescriptionPanel({ pr }: { pr: PullRequestAssessment }) {
+export function DescriptionPanel({
+  pr,
+  fill = false,
+}: {
+  pr: PullRequestAssessment;
+  fill?: boolean;
+}) {
   return (
-    <section className="min-w-0 p-4">
+    <section className={panelRoot(fill)}>
       <header className={PANEL_HEAD}>
         <span className="font-bold text-ink">Description</span>
         <a
@@ -26,7 +32,11 @@ export function DescriptionPanel({ pr }: { pr: PullRequestAssessment }) {
       </header>
 
       {pr.bodyHTML ? (
-        <div className="max-h-[480px] overflow-y-auto rounded-md border border-line p-4">
+        <div
+          className={`overflow-y-auto rounded-md border border-line p-4 ${
+            fill ? 'min-h-0 flex-1' : 'max-h-[480px]'
+          }`}
+        >
           <div className="md max-w-[80ch]" dangerouslySetInnerHTML={{ __html: pr.bodyHTML }} />
         </div>
       ) : (

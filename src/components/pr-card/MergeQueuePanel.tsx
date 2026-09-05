@@ -15,7 +15,14 @@ import { checkState, sortedChecks } from '../../lib/checks';
 import { compactAge } from '../../lib/time';
 import { CountPill } from './ui';
 import { CheckRow } from './ChecksPanel';
-import { duration, PANEL_EMPTY, PANEL_HEAD, PANEL_LINK, PANEL_SCROLLER } from './panelChrome';
+import {
+  duration,
+  PANEL_EMPTY,
+  PANEL_HEAD,
+  PANEL_LINK,
+  panelRoot,
+  panelScroller,
+} from './panelChrome';
 
 type StepState = 'done' | 'active' | 'waiting' | 'failed' | 'skipped';
 
@@ -164,7 +171,13 @@ const STATE_LABEL: Record<string, string> = {
 /** The queue moves without touching the pull request, so this panel keeps its own clock. */
 const QUEUE_POLL_MS = 15000;
 
-export function MergeQueuePanel({ pr }: { pr: PullRequestAssessment }) {
+export function MergeQueuePanel({
+  pr,
+  fill = false,
+}: {
+  pr: PullRequestAssessment;
+  fill?: boolean;
+}) {
   const [detail, setDetail] = useState<MergeQueueDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -206,7 +219,7 @@ export function MergeQueuePanel({ pr }: { pr: PullRequestAssessment }) {
     : [];
 
   return (
-    <section className="min-w-0 p-4">
+    <section className={panelRoot(fill)}>
       <header className={PANEL_HEAD}>
         <span className="font-bold text-ink">Merge queue</span>
         {detail && <CountPill>{STATE_LABEL[detail.state] ?? detail.state}</CountPill>}
@@ -242,7 +255,7 @@ export function MergeQueuePanel({ pr }: { pr: PullRequestAssessment }) {
 
       {detail && (
         <>
-          <ol className="mb-4 rounded-md border border-line">
+          <ol className="mb-4 shrink-0 rounded-md border border-line">
             {buildSteps(pr, detail).map((step, i, all) => (
               <li
                 key={step.key}
@@ -292,7 +305,7 @@ export function MergeQueuePanel({ pr }: { pr: PullRequestAssessment }) {
             </p>
           )}
 
-          <h5 className="flex items-center gap-2 pb-2 text-xs">
+          <h5 className="flex shrink-0 items-center gap-2 pb-2 text-xs">
             <span className="font-bold text-ink">Checks on the merge commit</span>
             <CountPill>{detail.checkTotal}</CountPill>
             {detail.headSha && (
@@ -303,7 +316,7 @@ export function MergeQueuePanel({ pr }: { pr: PullRequestAssessment }) {
           {queueChecks.length === 0 ? (
             <p className={PANEL_EMPTY}>The queue has not reported any checks yet.</p>
           ) : (
-            <ul className={PANEL_SCROLLER}>
+            <ul className={panelScroller(fill)}>
               {queueChecks.map((check) => (
                 <CheckRow key={check.id} check={check} />
               ))}

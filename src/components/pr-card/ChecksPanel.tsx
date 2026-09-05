@@ -25,7 +25,8 @@ import {
   PANEL_EMPTY,
   PANEL_HEAD,
   PANEL_LINK,
-  PANEL_SCROLLER,
+  panelRoot,
+  panelScroller,
 } from './panelChrome';
 
 const ANNOTATION_TONE: Record<string, string> = {
@@ -196,7 +197,7 @@ export function CheckRow({ check }: { check: CheckRunItem }) {
   };
 
   return (
-    <li>
+    <li className="defer-row">
       <div className="flex items-center gap-2.5 px-3 py-2 transition-colors duration-instant ease-out hover:bg-surface-hover">
         <CheckIcon state={state} />
         <button
@@ -265,7 +266,7 @@ export function CheckRow({ check }: { check: CheckRunItem }) {
   );
 }
 
-export function ChecksPanel({ pr }: { pr: PullRequestAssessment }) {
+export function ChecksPanel({ pr, fill = false }: { pr: PullRequestAssessment; fill?: boolean }) {
   const { total, failed, running } = summarizeChecks(pr);
   const checks = sortedChecks(pr);
   const subtext = [
@@ -276,7 +277,7 @@ export function ChecksPanel({ pr }: { pr: PullRequestAssessment }) {
     .join(' · ');
 
   return (
-    <section className="min-w-0 p-4">
+    <section className={panelRoot(fill)}>
       <header className={PANEL_HEAD}>
         <span className="font-bold text-ink">Checks</span>
         <CountPill>{total}</CountPill>
@@ -294,7 +295,7 @@ export function ChecksPanel({ pr }: { pr: PullRequestAssessment }) {
       {checks.length === 0 ? (
         <p className={PANEL_EMPTY}>No checks reported on this pull request.</p>
       ) : (
-        <ul className={PANEL_SCROLLER}>
+        <ul className={panelScroller(fill)}>
           {checks.map((check) => (
             <CheckRow key={check.id} check={check} />
           ))}
