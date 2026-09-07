@@ -75,7 +75,7 @@ The unit of the list. One pull request carrying identity, diff, status chips, bo
 _Avoid_: Row, table row, tile
 
 **PR Inspector**:
-The resizable detail pane beside the work queue, holding the Description, Merge queue, Checks and Threads tabs. Below the desktop breakpoint it becomes a bounded bottom drawer.
+The resizable detail pane beside the work queue. It holds the Description, Merge queue, Checks, Threads and Files tabs. A button in the card header expands it to the whole window, and `Esc` leaves that mode. Below the desktop breakpoint it becomes a bounded bottom drawer.
 _Avoid_: Modal, popup, expanded row
 
 **Status Chip**:

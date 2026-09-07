@@ -15,6 +15,7 @@ browser tabs.
 - Provides dedicated views for failures, merge readiness, drafts, queue state, and reviews.
 - Filters by repository and search term, with shareable URL state.
 - Opens PR details in a resizable master/detail workspace instead of another tab.
+- Expands that workspace to the full window, and leaves it on the same button or `Esc`.
 - Summarizes changes since your last visit using GitHub activity and browser-local snapshots.
 - Shows descriptions, checks and logs, unresolved review threads, and merge-queue progress.
 - Supports updating branches, retrying failed checks, merging or enqueueing, deployment approval,
@@ -76,14 +77,20 @@ cp .env.example .env.local
 | `GITHUB_TOKEN` | GitHub token used by the server | Output of `gh auth token` |
 | `GITHUB_SEARCH_QUERY` | Search query for **Mine** | `author:@me is:pr is:open sort:updated-desc` |
 | `GITHUB_REVIEWS_SEARCH_QUERY` | Search query or `\|`-separated queries for **Reviews** | Direct requests plus PRs reviewed by you |
-| `GITHUB_PAGE_SIZE` | Rich GraphQL nodes fetched per page, capped at 50 | `10` |
+| `GITHUB_PAGE_SIZE` | Rich GraphQL nodes fetched per page, capped at 10 | `10` |
 | `GITHUB_USER_NAME` | Commit-author name used to identify your own timeline commits | Unset |
 | `GITHUB_USER_EMAIL` | Commit-author email used to identify your own timeline commits | Unset |
 | `GITHUB_WEBHOOK_SECRET` | Verifies `X-Hub-Signature-256` on the optional webhook endpoint | Unset |
+| `DASHBOARD_API_TOKEN` | Bearer token the write routes demand | Unset |
 | `GITHUB_GRAPHQL_ENDPOINT` | GraphQL endpoint override, primarily for testing | GitHub's public endpoint |
 
 The name and email overrides only affect unread-activity classification for raw commit events;
 comments and reviews are matched using your GitHub login.
+
+Set `DASHBOARD_API_TOKEN` to guard the write routes: `/api/prs/*`, `/api/threads/*` and
+`/api/refresh`. Each request must then carry `Authorization: Bearer <token>`. The browser sends no
+such header, so the buttons in the app stop working while the token is set. It is there for a
+script or a proxy, not for the interface. Leave it unset for the default localhost setup.
 
 Multiple review searches are useful when you also want opt-in team queues. Separate complete
 GitHub search expressions with `|`, for example:
@@ -127,7 +134,7 @@ Shortcuts are disabled while focus is in an input, textarea, select, or editable
 | `S` | Snooze the inspected PR until tomorrow |
 | `H` | Hide the inspected PR |
 | `R` | Refresh the dashboard |
-| `Esc` | Close the inspector or command palette |
+| `Esc` | Leave full screen, then close the inspector or command palette |
 | `⌘K` / `Ctrl+K` / `?` | Open the command palette |
 
 ## Local data

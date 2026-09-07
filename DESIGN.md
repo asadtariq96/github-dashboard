@@ -72,11 +72,17 @@ Two clocks, because the costs differ:
 | `MAX_KEYS` | 40 | Timelines per activity request | A wide view cannot ask for hundreds |
 | `URL_WRITE_DEBOUNCE_MS` | 300 | Search typing | One search must not bury the history |
 
-Three de-duplication mechanisms: `syncPromise` (ten callers share one GitHub call),
-`activityInFlight` (registered before any request starts), and `mapWithConcurrency`.
+Four de-duplication mechanisms. `syncPromise` lets ten callers share one GitHub call.
+`activityInFlight` is registered before any request starts. `mapWithConcurrency` caps the
+parallel work. `tokenLookup` in `src/lib/config.ts` shares one `gh auth token` process between
+callers that overlap. That read runs `execFile`, never `execSync`, which would stop the event
+loop until `gh` answers.
 
 The activity map lives on `st.activity`, not `st.cache.activity`, because a sync replaces
 `st.cache` wholesale and would discard a lazy fetch that landed mid-sync.
+
+The client caps a pass at 40 keys too, and it aborts the request when the view changes. An
+aborted pass gives its keys back, so the next view can ask for them again.
 
 **Three ways a change reaches the screen**, all ending on a warm cache: a webhook to
 `refreshAllModes()` to `prEventEmitter.emit()` to SSE to a refetch (seconds, needs a tunnel);
@@ -98,7 +104,7 @@ protection because mutation routes use the operator's GitHub token.
   views with live counts and a repository filter. The collapse keeps the toggle and view icons on
   fixed rows and hides the repository section completely, so nothing shifts vertically.
 - A filter bar: active-filter chips, a sort menu, a count, and Mark all seen.
-- A stack of cards, 16px apart.
+- A stack of cards, 16px apart, closing to 8px while the inspector is open.
 
 **Filters and sort live in the URL** (`view`, `repo`, `q`, `sort`), so the back button
 restores a filter set and a link carries one. Only non-default values are written. Picking a
@@ -166,6 +172,9 @@ event, which is what makes a resize feel sluggish. Queue cards retain every summ
 field and reflow them onto additional rows as the master column narrows. The inspector shell is
 stable while navigating between PRs, avoiding a repeated entrance animation; opening and closing
 animate the grid tracks directly. Below the desktop breakpoint it becomes a bounded bottom drawer.
+
+The header of the inspected card carries the snooze menu, a full-screen button and the close
+button. Full screen takes the whole window. Leave it with the same button or with `Esc`.
 A queued pull request opens on **Merge queue**; everything else opens on **Checks**. Every tab
 shows one panel across the full width, and the tabs are the only way between them. A panel that
 fills the inspector scrolls itself, so the tab body never scrolls inside another scroller.
@@ -176,12 +185,15 @@ The width is remembered in the browser. Set the row height with `itemHeight`, ne
 `compact` density preset, whose 0.8 factor breaks the container query that hides the truncation
 ellipsis, so that every name reports as too long.
 
-The inspector starts with a **Since you last looked** digest. GitHub timeline activity supplies
-new comments, reviews and commits; a browser-local snapshot adds check, review, mergeability and
-thread-count transitions. The snapshot is recorded only after the digest is computed.
+A **since you last looked** digest sits under the header of the inspected card. It gives the
+first change and a count of the rest, and it hides itself when nothing changed. GitHub timeline
+activity supplies new comments, reviews and commits; a browser-local snapshot adds check, review,
+mergeability and thread-count transitions. The snapshot is recorded only after the digest is
+computed.
 
-Keyboard controls operate the current queue: `J`/`K` move, `1`–`5` select inspector tabs, `G`
-opens GitHub, `S` snoozes, `H` hides, `R` refreshes, and `⌘K` or `?` opens the command palette.
+Keyboard controls operate the current queue. `J`/`K` move, `1`–`5` select inspector tabs, `G`
+opens GitHub, `S` snoozes, `H` hides and `R` refreshes. `⌘K` or `?` opens the command palette.
+`Esc` leaves full screen first, and closes the inspector on the next press.
 
 - **Description** — `bodyHTML`, GitHub's own rendered and sanitized markdown, so issue refs
   and mentions resolve against the repository. No markdown library, no extra request.
@@ -398,9 +410,9 @@ GitHub's edge with a 502 long before the response is ready. Measured: 502s start
 nodes on an account with many open pull requests, and 10 is stable.
 
 A small `first` alone is safe but silently drops every match past the first page. So the
-search connection is walked by cursor instead: pages of **10**, up to **6** of them, covering
-60 matches. `getPageSize` returns 10 for both modes, because the timeout is a GitHub-side
-limit and has nothing to do with which mode is asking.
+search connection is walked by cursor instead: pages of **10**, up to **10** of them, covering
+100 matches. `getPageSize` takes no mode and always returns 10. The timeout is a GitHub-side
+limit, and it has nothing to do with which mode is asking.
 
 `truncated` on the response still means the search matched more than the walk returned, and
 the UI says so rather than pretending the list is complete.
