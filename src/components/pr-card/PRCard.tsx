@@ -3,7 +3,6 @@
 import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  ArrowRight,
   Book,
   Check,
   ChevronDown,
@@ -117,6 +116,8 @@ export function PRCard({
   onToggleSelect,
   activeTab,
   onTabChange,
+  inspectorTools,
+  headerNotice,
 }: {
   pr: PullRequestAssessment;
   mode: Mode;
@@ -144,6 +145,8 @@ export function PRCard({
   onToggleSelect?: (shiftKey: boolean) => void;
   activeTab?: TabId;
   onTabChange?: (tab: TabId) => void;
+  inspectorTools?: React.ReactNode;
+  headerNotice?: React.ReactNode;
 }) {
   // A queued pull request opens on the queue, because that is what decides its fate.
   const [internalTab, setInternalTab] = useState<TabId>(
@@ -172,10 +175,6 @@ export function PRCard({
     recordSnapshot(prKey, pr);
   };
 
-  const handleToggle = () => {
-    onToggleExpand();
-  };
-
   const actionMenuItems: MenuItem[] = secondary.map((action) => ({
     id: action.id,
     label: action.label,
@@ -200,14 +199,14 @@ export function PRCard({
     >
       <div className={fillAvailable ? 'flex h-full min-h-0 flex-col' : ''}>
         <div
-          onClick={handleToggle}
-          className={`flex cursor-pointer select-none items-center gap-4 px-5 py-4 transition-colors duration-instant ease-out hover:bg-surface-hover ${
-            contained ? 'flex-wrap gap-y-3' : ''
+          onClick={onToggleExpand}
+          className={`flex cursor-pointer select-none items-center transition-colors duration-instant ease-out hover:bg-surface-hover ${
+            contained ? 'flex-wrap gap-2 px-3 py-2.5' : 'flex-wrap gap-3 px-4 py-3'
           }`}
         >
           <div
-            className={`flex min-w-0 items-center gap-3 ${
-              contained ? 'flex-[1_1_720px]' : 'flex-1'
+            className={`flex min-w-0 ${
+              contained ? 'w-full items-start gap-2' : 'flex-[1_1_20rem] items-center gap-3'
             }`}
           >
             {onToggleSelect && (
@@ -226,7 +225,7 @@ export function PRCard({
                   onToggleSelect(e.shiftKey);
                 }}
                 aria-label={`Select pull request ${pr.number}`}
-                className="pointer-safe shrink-0 cursor-pointer accent-accent-fill"
+                className={`shrink-0 cursor-pointer accent-accent-fill ${contained ? 'mt-1 h-3.5 w-3.5' : 'pointer-safe'}`}
               />
             )}
 
@@ -234,7 +233,7 @@ export function PRCard({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                handleToggle();
+                onToggleExpand();
               }}
               aria-expanded={isExpanded}
               aria-label={
@@ -242,7 +241,11 @@ export function PRCard({
                   ? `Hide detail for pull request ${pr.number}`
                   : `Show detail for pull request ${pr.number}`
               }
-              className={ICON_BUTTON}
+              className={
+                contained
+                  ? 'shrink-0 rounded p-0.5 text-dim hover:bg-surface-muted hover:text-ink'
+                  : ICON_BUTTON
+              }
             >
               <ChevronDown
                 aria-hidden
@@ -266,7 +269,7 @@ export function PRCard({
                     e.stopPropagation();
                     visit();
                   }}
-                  className={`truncate text-[15px] tracking-[-0.01em] hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${
+                  className={`${contained ? 'line-clamp-2 text-[13px] leading-snug' : isExpanded ? 'break-words text-[15px]' : 'truncate text-[15px]'} tracking-[-0.01em] hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${
                     newActivity.count > 0 ? 'font-bold text-ink' : 'font-semibold text-ink'
                   }`}
                 >
@@ -277,24 +280,28 @@ export function PRCard({
                 </span>
               </div>
 
-              <div className="mt-0.5 flex items-center gap-2 text-xs text-dim">
-                <Book aria-hidden strokeWidth={2} className="h-[13px] w-[13px] shrink-0" />
-                <span className="truncate">{pr.repository.nameWithOwner}</span>
-                <span aria-hidden className="shrink-0">
-                  &bull;
-                </span>
-                <GitBranch aria-hidden strokeWidth={2} className="h-[13px] w-[13px] shrink-0" />
-                <span className="truncate rounded-full bg-surface-muted px-1.5 font-mono text-2xs text-muted">
-                  {pr.headRefName}
-                </span>
-                <ArrowRight
-                  aria-hidden
-                  strokeWidth={2}
-                  className="h-[13px] w-[13px] shrink-0 text-faint"
-                />
-                <span className="shrink-0 rounded-full bg-surface-muted px-1.5 font-mono text-2xs text-muted">
-                  {pr.baseRefName}
-                </span>
+              <div
+                className={`mt-1 text-xs text-dim ${contained ? 'space-y-1' : 'flex flex-wrap items-center gap-x-3 gap-y-1'}`}
+              >
+                <div className="flex min-w-0 items-start gap-1.5">
+                  <Book aria-hidden strokeWidth={2} className="mt-0.5 h-3 w-3 shrink-0" />
+                  <span className="break-all" title={pr.repository.nameWithOwner}>
+                    {pr.repository.nameWithOwner}
+                  </span>
+                </div>
+                <div className="flex min-w-0 items-start gap-1.5 font-mono text-2xs text-muted">
+                  <GitBranch aria-hidden strokeWidth={2} className="mt-0.5 h-3 w-3 shrink-0" />
+                  <span
+                    className="min-w-0 break-all"
+                    title={`${pr.headRefName} → ${pr.baseRefName}`}
+                  >
+                    {pr.headRefName}{' '}
+                    <span aria-hidden className="text-faint">
+                      →
+                    </span>{' '}
+                    {pr.baseRefName}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -302,9 +309,7 @@ export function PRCard({
           <div
             className={`${
               hideStats ? 'hidden' : contained ? 'flex' : 'hidden lg:flex'
-            } min-w-0 flex-wrap items-center gap-2 ${
-              contained ? 'max-w-full flex-none justify-end' : 'shrink-0'
-            }`}
+            } min-w-0 flex-wrap items-center gap-2 ${contained ? 'max-w-full flex-1' : 'shrink-0'}`}
           >
             {pr.additions + pr.deletions > 0 && (
               <span
@@ -312,7 +317,7 @@ export function PRCard({
                 className="flex shrink-0 items-center gap-1.5"
               >
                 <DiffStat additions={pr.additions} deletions={pr.deletions} />
-                <DiffBar additions={pr.additions} deletions={pr.deletions} />
+                {!contained && <DiffBar additions={pr.additions} deletions={pr.deletions} />}
               </span>
             )}
             <StatusChips pr={pr} />
@@ -320,9 +325,9 @@ export function PRCard({
 
           <div
             onClick={(e) => e.stopPropagation()}
-            className={`${contained ? 'ml-auto flex-wrap' : ''} flex shrink-0 items-center gap-2.5`}
+            className={`${contained ? 'ml-auto flex-wrap' : 'ml-auto'} flex shrink-0 items-center gap-2.5`}
           >
-            <TimePair pr={pr} force={contained} />
+            <TimePair pr={pr} />
 
             {newActivity.count > 0 && (
               <span
@@ -348,6 +353,7 @@ export function PRCard({
 
             {hasConflicts ? (
               <ActionButton
+                compact={contained}
                 icon={GitMerge}
                 tone="fillWarn"
                 href={`${pr.url}/conflicts`}
@@ -357,6 +363,7 @@ export function PRCard({
               </ActionButton>
             ) : primary ? (
               <SplitButton
+                compact={contained}
                 icon={ACTION_ICON[primary.id]}
                 tone={SPLIT_TONE[primary.id]}
                 onClick={() => onRunAction!(pr, primary.id)}
@@ -368,6 +375,7 @@ export function PRCard({
               </SplitButton>
             ) : pr.isInMergeQueue ? (
               <ActionButton
+                compact={contained}
                 icon={ListChecks}
                 href={pr.mergeQueueInfo?.url || pr.url}
                 title="Open the merge queue on GitHub"
@@ -376,6 +384,7 @@ export function PRCard({
               </ActionButton>
             ) : (
               <ActionButton
+                compact={contained}
                 icon={ExternalLink}
                 href={pr.url}
                 title="Open this pull request on GitHub"
@@ -383,8 +392,10 @@ export function PRCard({
                 Review
               </ActionButton>
             )}
+            {inspectorTools}
           </div>
         </div>
+        {headerNotice}
 
         {/* Motion owns the accordion reveal; the list only moves the surrounding rows. */}
         <AnimatePresence initial={false}>

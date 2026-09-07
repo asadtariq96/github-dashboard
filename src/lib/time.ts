@@ -1,13 +1,3 @@
-/** Two or three characters, for a column that must not shift. */
-export function shortAge(iso: string): string {
-  const seconds = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (seconds < 60) return 'now';
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
-  if (seconds < 2592000) return `${Math.floor(seconds / 86400)}d`;
-  return `${Math.floor(seconds / 2592000)}mo`;
-}
-
 /** One unit plus "ago", as the card's timestamps read: `now`, `12m ago`, `3w ago`. */
 export function compactAge(iso: string): string {
   const seconds = (Date.now() - new Date(iso).getTime()) / 1000;

@@ -1,14 +1,27 @@
-import { execSync } from 'child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 
-export function getGitHubToken(): string {
+const execFileAsync = promisify(execFile);
+let tokenLookup: Promise<string> | null = null;
+
+export async function getGitHubToken(): Promise<string> {
   if (process.env.GITHUB_TOKEN && process.env.GITHUB_TOKEN.trim() !== '') {
     return process.env.GITHUB_TOKEN.trim();
   }
 
+  if (tokenLookup) return tokenLookup;
+  tokenLookup = readCliToken();
   try {
-    const output = execSync('gh auth token', {
+    return await tokenLookup;
+  } finally {
+    tokenLookup = null;
+  }
+}
+
+async function readCliToken(): Promise<string> {
+  try {
+    const { stdout: output } = await execFileAsync('gh', ['auth', 'token'], {
       encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'ignore'],
     });
     // `gh` via mise/shims can print a "mise ... tools:" notice to stdout before the
     // token. Take the last non-empty line so the Authorization header stays valid.
@@ -82,11 +95,8 @@ export function getRecentSearchQueries(mode: Mode, since: string): string[] {
  * needs to be small enough for one page to resolve, not large enough to cover a result set.
  * Capped at 10: a larger single page reintroduces the edge 502s this paging was built to avoid.
  */
-export function getPageSize(_mode: Mode): number {
+export function getPageSize(): number {
   const raw = Number(process.env.GITHUB_PAGE_SIZE);
   if (Number.isFinite(raw) && raw > 0) return Math.min(raw, 10);
   return 10;
 }
-
-export const SEARCH_MAX_PAGES = 10;
-export const SEARCH_MAX_RESULTS = SEARCH_MAX_PAGES * 10;

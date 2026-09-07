@@ -26,21 +26,6 @@ export function queueProgressLabel(pr: PullRequestAssessment): string | null {
   return QUEUE_WORKING_LABEL[state] ?? 'In the merge queue';
 }
 
-export function primaryLabel(pr: PullRequestAssessment): string | null {
-  if (pr.mergeQueueInfo?.isWaitingForApproval) return 'Needs approval';
-  if (pr.checks === 'Failing') return 'Checks failing';
-  if (pr.review === 'Changes Requested') return 'Changes requested';
-  if (pr.mergeability === 'Merge Conflicts') return 'Conflicts';
-  if (pr.mergeability === 'Behind Base Branch') return 'Behind base';
-  if (pr.unresolvedThreadsCount > 0)
-    return `${pr.unresolvedThreadsCount} thread${pr.unresolvedThreadsCount === 1 ? '' : 's'}`;
-  if (pr.isInMergeQueue) return 'In merge queue';
-  if (pr.mergeability === 'Ready to Merge' && !pr.isDraft) return 'Ready';
-  if (pr.isDraft) return 'Draft';
-  if (pr.checks === 'Running') return 'Checks running';
-  return null;
-}
-
 export interface BlockedReason {
   /** 1 is the most urgent. Lower sorts first. */
   rank: number;

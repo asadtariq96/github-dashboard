@@ -1,4 +1,4 @@
-import { promises as fs } from 'node:fs';
+import { promises as fs, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { PrActivityInfo, PullRequestAssessment, RecentPullRequest } from '../types/pr';
@@ -84,13 +84,7 @@ async function saveSnapshot(mode: Mode, cache: CacheState): Promise<void> {
 
 function loadSnapshotSync(mode: Mode): (Partial<CacheState> & { savedAt?: number }) | null {
   try {
-    const override = process.env.CACHE_SNAPSHOT_PATH?.trim();
-    const base = override || path.join(os.tmpdir(), 'pr-desk-cache');
-    const file = path.join(base, `${mode}.json`);
-    // Sync read only at boot; sync path keeps startup simple and never blocks a request.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const req = require('node:fs') as typeof import('node:fs');
-    const raw = req.readFileSync(file, 'utf-8');
+    const raw = readFileSync(snapshotPath(mode), 'utf-8');
     const parsed = JSON.parse(raw);
     if (!parsed || !Array.isArray(parsed.prs)) return null;
     return parsed;
@@ -146,11 +140,6 @@ function stateFor(mode: Mode): ModeState {
     st = emptyState(mode);
     modeStates.set(mode, st);
   }
-  // A hot reload can hand back a state built by an earlier shape of this module.
-  if (!(st.activityFetchedAt instanceof Map)) st.activityFetchedAt = new Map();
-  if (!(st.activityInFlight instanceof Map)) st.activityInFlight = new Map();
-  if (!st.activity) st.activity = st.cache?.activity ?? {};
-  if (!st.cache.recentPRs) st.cache.recentPRs = [];
   return st;
 }
 
@@ -167,14 +156,9 @@ function keyToRef(key: string): { repo: string; number: number } | null {
  * Fetch timelines for `keys` into a mode's activity map, skipping any that are fresh
  * and any already in flight. Capped concurrency; mutates `st.cache.activity` in place.
  */
-async function fetchActivityInto(
-  st: ModeState,
-  mode: Mode,
-  keys: string[],
-  force = false,
-): Promise<void> {
+async function fetchActivityInto(st: ModeState, keys: string[], force = false): Promise<void> {
   const now = Date.now();
-  const wanted = keys.filter((key) => {
+  const wanted = [...new Set(keys)].filter((key) => {
     if (st.activityInFlight.has(key)) return false;
     if (force) return true;
     const at = st.activityFetchedAt.get(key);
@@ -184,20 +168,21 @@ async function fetchActivityInto(
   const pending = keys.map((k) => st.activityInFlight.get(k)).filter(Boolean) as Promise<void>[];
 
   if (wanted.length > 0) {
-    const meLogin = await getViewerLogin();
-
     // Register before any request starts, so a second caller waits instead of refetching.
     const done = new Map<string, () => void>();
     for (const key of wanted) {
       st.activityInFlight.set(key, new Promise<void>((resolve) => done.set(key, resolve)));
     }
 
+    const viewer = getViewerLogin();
     await mapWithConcurrency(wanted, ACTIVITY_CONCURRENCY, async (key) => {
       const ref = keyToRef(key);
       try {
+        const meLogin = await viewer;
         if (ref) {
           const info = await fetchPrActivity(ref.repo, ref.number, meLogin);
-          st.activity = { ...st.activity, [key]: info };
+          st.activity[key] = info;
+          st.cache.activity = st.activity;
           st.activityFetchedAt.set(key, Date.now());
         }
       } catch (err) {
@@ -218,7 +203,7 @@ export async function getActivityFor(
   keys: string[],
 ): Promise<Record<string, PrActivityInfo>> {
   const st = stateFor(mode);
-  await fetchActivityInto(st, mode, keys);
+  await fetchActivityInto(st, keys);
   const out: Record<string, PrActivityInfo> = {};
   for (const key of keys) {
     const info = st.activity[key];
@@ -245,7 +230,7 @@ export async function getDashboardState(mode: Mode, forceRefresh = false): Promi
   const recentCutoff = new Date(now - 7 * 24 * 60 * 60 * 1000);
   const recentQueries = getRecentSearchQueries(mode, recentCutoff.toISOString().slice(0, 10));
   const query = getQueryKey(mode);
-  const first = getPageSize(mode);
+  const first = getPageSize();
 
   // Return cached result if fresh and not forced
   if (!forceRefresh && st.lastSyncTimestamp > 0 && now - st.lastSyncTimestamp < CACHE_TTL_MS) {
@@ -289,7 +274,7 @@ export async function getDashboardState(mode: Mode, forceRefresh = false): Promi
       }
 
       const truncated = byId.size < matchedTotal || pageCapped;
-      let prs = normalizePullRequests(Array.from(byId.values()));
+      const prs = normalizePullRequests(Array.from(byId.values()));
 
       const recentFailures = recentSettled.filter((result) => result.status === 'rejected');
       for (const failure of recentFailures) {
@@ -324,7 +309,7 @@ export async function getDashboardState(mode: Mode, forceRefresh = false): Promi
       const blockedKeys = prs
         .filter((p) => isBlocked(mode, p))
         .map((p) => `${p.repository.nameWithOwner}#${p.number}`);
-      await fetchActivityInto(st, mode, blockedKeys, forceRefresh);
+      await fetchActivityInto(st, blockedKeys, forceRefresh);
 
       // Check for active merge_group workflow runs waiting for manual environment deployment approvals
       const mergeQueuePRs = prs.filter((p) => p.isInMergeQueue);

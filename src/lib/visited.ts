@@ -15,13 +15,18 @@ export interface ChangeDigest {
   activity: NewActivity;
 }
 
-export function getVisitedMap(): Record<string, number> {
+let visitedRaw: string | null = null;
+let visitedMap: Record<string, number> = {};
+
+function getVisitedMap(): Record<string, number> {
   try {
     const raw = localStorage.getItem(VISITED_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') return parsed;
+    if (raw !== visitedRaw) {
+      const parsed = raw ? JSON.parse(raw) : {};
+      visitedMap = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+      visitedRaw = raw;
     }
+    return visitedMap;
   } catch (e) {
     console.warn('Failed to read visited PRs:', e);
   }
@@ -30,7 +35,7 @@ export function getVisitedMap(): Record<string, number> {
 
 export function recordVisit(key: string): void {
   try {
-    const map = getVisitedMap();
+    const map = { ...getVisitedMap() };
     map[key] = Date.now();
     localStorage.setItem(VISITED_STORAGE_KEY, JSON.stringify(map));
   } catch (e) {
@@ -100,7 +105,7 @@ export function computeChangeDigest(
 /** Mark a set of PRs seen as of now. Deliberate only; never on a timer or on focus. */
 export function markAllSeen(keys: string[]): void {
   try {
-    const map = getVisitedMap();
+    const map = { ...getVisitedMap() };
     const now = Date.now();
     for (const key of keys) map[key] = now;
     localStorage.setItem(VISITED_STORAGE_KEY, JSON.stringify(map));

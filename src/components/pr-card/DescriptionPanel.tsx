@@ -1,6 +1,5 @@
 'use client';
 
-import React from 'react';
 import { ExternalLink } from 'lucide-react';
 import type { PullRequestAssessment } from '../../types/pr';
 import { PANEL_HEAD, PANEL_LINK, panelRoot } from './panelChrome';

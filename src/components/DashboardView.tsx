@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { DashboardSyncResponse, PrActivityInfo, PullRequestAssessment } from '../types/pr';
 import type { Mode } from '../lib/config';
 import { PRCardList } from './PRCardList';
@@ -200,14 +200,11 @@ export function DashboardView({ mode }: { mode: Mode }) {
     );
   };
 
-  /** Each action names its endpoint, its body, and what it says when it lands. */
-  const post = postApi;
-
   const runAction = async (pr: PullRequestAssessment, id: RowActionId) => {
     const call = buildActionCall(pr, id);
     setBusy((current) => ({ ...current, [pr.id]: id }));
     try {
-      await post(call.url, call.body);
+      await postApi(call.url, call.body);
       if (id === 'close' || (id === 'merge' && !pr.hasRepoMergeQueue)) {
         setRecentCompletions(recordCompletion(pr, id === 'merge' ? 'Merged' : 'Closed'));
       }
@@ -229,7 +226,7 @@ export function DashboardView({ mode }: { mode: Mode }) {
                 onClick: () => {
                   void (async () => {
                     try {
-                      await post('/api/prs/convert-draft', { prId: pr.id });
+                      await postApi('/api/prs/convert-draft', { prId: pr.id });
                       toast.success(`#${pr.number} is a draft again`);
                       await fetchDashboardState(true);
                     } catch (err: any) {
@@ -362,24 +359,24 @@ export function DashboardView({ mode }: { mode: Mode }) {
     unreadOf,
   ]);
 
-  /** Keys for the rows currently on screen, used to lazily fill their activity timelines. */
+  /** Keys in the filtered queue, fetched in batches of 40. */
   const visibleKeys = useMemo(
     () => filteredPRs.map((pr) => `${pr.repository.nameWithOwner}#${pr.number}`),
     [filteredPRs],
   );
 
   /**
-   * Fetch timelines for the rows on screen, and only those. The server eagerly refreshes
-   * actionable PRs, so this fills whatever else the current view is showing.
+   * The server refreshes actionable PRs; fill the remaining timelines in bounded batches.
    */
   useEffect(() => {
-    const missing = visibleKeys.filter(
-      (key) => !data?.activity?.[key] && !requestedActivity.current.has(key),
-    );
+    const missing = visibleKeys
+      .filter((key) => !data?.activity?.[key] && !requestedActivity.current.has(key))
+      .slice(0, 40);
     if (missing.length === 0) return;
 
     missing.forEach((key) => requestedActivity.current.add(key));
-    let cancelled = false;
+    const controller = new AbortController();
+    let completed = false;
 
     (async () => {
       try {
@@ -387,22 +384,27 @@ export function DashboardView({ mode }: { mode: Mode }) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ keys: missing }),
+          signal: controller.signal,
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json: { activity: Record<string, PrActivityInfo> } = await res.json();
-        if (cancelled || !json.activity) return;
+        if (controller.signal.aborted || !json.activity) return;
+        completed = true;
         setData((current) =>
           current ? { ...current, activity: { ...current.activity, ...json.activity } } : current,
         );
       } catch (err) {
         // A missing timeline costs an unread count, not the page. Allow a later retry.
-        missing.forEach((key) => requestedActivity.current.delete(key));
-        console.warn('activity fetch failed:', err);
+        if (!controller.signal.aborted) {
+          missing.forEach((key) => requestedActivity.current.delete(key));
+          console.warn('activity fetch failed:', err);
+        }
       }
     })();
 
     return () => {
-      cancelled = true;
+      controller.abort();
+      if (!completed) missing.forEach((key) => requestedActivity.current.delete(key));
     };
   }, [visibleKeys, data?.activity, mode]);
 
@@ -494,7 +496,7 @@ export function DashboardView({ mode }: { mode: Mode }) {
         const call = buildActionCall(pr, action);
         setBusy((current) => ({ ...current, [pr.id]: action }));
         try {
-          await post(call.url, call.body);
+          await postApi(call.url, call.body);
           done += 1;
         } catch (err: any) {
           failures.push(`#${pr.number}: ${err.message}`);
@@ -749,19 +751,9 @@ export function DashboardView({ mode }: { mode: Mode }) {
           onSelectRepo={setSelectedRepo}
         />
 
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-4 py-3 sm:px-6 lg:px-8">
-          <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-line bg-surface/75 p-2 shadow-sm backdrop-blur-sm">
-            <div className="shrink-0 px-1">
-              <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-dim">
-                {mode === 'mine' ? 'Your workspace' : 'Review inbox'}
-              </p>
-              <h2 className="font-display text-xl capitalize leading-none tracking-tight text-ink">
-                {activeViewLabel}
-              </h2>
-            </div>
-
-            <span aria-hidden className="hidden h-7 w-px bg-line sm:block" />
-
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-3 py-2 sm:px-4">
+          <div className="mb-2 flex min-h-8 flex-wrap items-center gap-2">
+            <h2 className="text-sm font-semibold text-ink">{activeViewLabel}</h2>
             <div className="relative min-w-[12rem] flex-1 sm:hidden">
               <Search
                 aria-hidden
@@ -778,7 +770,7 @@ export function DashboardView({ mode }: { mode: Mode }) {
             </div>
 
             <span className="shrink-0 px-1 font-mono text-xs tabular text-dim">
-              {activeView === 'done-recently' ? shownDoneRecently.length : filteredPRs.length} shown
+              {activeView === 'done-recently' ? shownDoneRecently.length : filteredPRs.length}
             </span>
 
             {activeChips.length > 0 && (

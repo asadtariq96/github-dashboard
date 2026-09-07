@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowUpDown, Check } from 'lucide-react';
 import { SORTS, sortSpec, type SortId } from '../lib/sort';
 

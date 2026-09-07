@@ -65,7 +65,7 @@ async function fetchLogTail(
     const res = await fetch(`https://api.github.com/repos/${repo}/actions/jobs/${jobId}/logs`, {
       headers: {
         Accept: 'application/vnd.github+json',
-        Authorization: `Bearer ${getGitHubToken()}`,
+        Authorization: `Bearer ${await getGitHubToken()}`,
         'User-Agent': 'GitHub-Dashboard-App',
       },
       redirect: 'follow',

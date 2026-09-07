@@ -8,7 +8,7 @@ export async function executeRest<T>(
     headers?: Record<string, string>;
   } = {},
 ): Promise<T> {
-  const token = getGitHubToken();
+  const token = await getGitHubToken();
   const endpoint = path.startsWith('http')
     ? path
     : `https://api.github.com/${path.replace(/^\//, '')}`;
@@ -525,7 +525,7 @@ export async function executeGraphQL<T>(
   query: string,
   variables: Record<string, unknown> = {},
 ): Promise<T> {
-  const token = getGitHubToken();
+  const token = await getGitHubToken();
   const endpoint = getGraphQLUrl();
 
   const res = await fetch(endpoint, {

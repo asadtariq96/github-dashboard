@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { PRCard } from '../../../components/pr-card/PRCard';
 import { FIXTURES } from '../../../components/pr-card/fixtures';
 import { ThemeToggle } from '../../../components/ThemeToggle';

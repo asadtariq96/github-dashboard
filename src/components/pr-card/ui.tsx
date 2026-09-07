@@ -164,6 +164,7 @@ export function ActionButton({
   disabled,
   busy,
   trailingChevron,
+  compact = false,
   title,
 }: {
   icon?: IconType;
@@ -174,9 +175,10 @@ export function ActionButton({
   disabled?: boolean;
   busy?: boolean;
   trailingChevron?: boolean;
+  compact?: boolean;
   title?: string;
 }) {
-  const className = `${BUTTON_BASE} ${BUTTON_TONE[tone]} pointer-safe tap-safe px-3 py-2`;
+  const className = `${BUTTON_BASE} ${BUTTON_TONE[tone]} tap-safe ${compact ? 'px-2 py-1' : 'pointer-safe px-3 py-2'}`;
   const inner = (
     <>
       {busy ? (
@@ -359,6 +361,7 @@ export function SplitButton({
   busy,
   menuItems,
   menuLabel,
+  compact = false,
 }: {
   children: React.ReactNode;
   icon?: IconType;
@@ -367,6 +370,7 @@ export function SplitButton({
   busy?: boolean;
   menuItems: MenuItem[];
   menuLabel: string;
+  compact?: boolean;
 }) {
   const fill = SPLIT_FILL[tone];
 
@@ -378,7 +382,7 @@ export function SplitButton({
         type="button"
         onClick={onClick}
         disabled={busy}
-        className="tap-safe inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-accent-on transition-colors duration-instant ease-out focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-on disabled:opacity-60"
+        className={`tap-safe inline-flex items-center gap-1.5 ${compact ? 'px-2 py-1' : 'px-3.5 py-2'} text-xs font-semibold text-accent-on transition-colors duration-instant ease-out focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-on disabled:opacity-60`}
       >
         {busy ? (
           <Loader2 aria-hidden className="h-[14px] w-[14px] animate-spin" />

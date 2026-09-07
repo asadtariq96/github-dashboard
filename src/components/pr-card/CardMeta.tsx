@@ -1,6 +1,5 @@
 'use client';
 
-import React from 'react';
 import { GitPullRequest, GitPullRequestDraft, ListChecks } from 'lucide-react';
 import type { PullRequestAssessment } from '../../types/pr';
 import { compactAge, longAge } from '../../lib/time';

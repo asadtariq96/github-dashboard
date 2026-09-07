@@ -1,6 +1,5 @@
 'use client';
 
-import React from 'react';
 import type { PullRequestAssessment } from '../../types/pr';
 import type { FilterChip } from '../FilterChips';
 

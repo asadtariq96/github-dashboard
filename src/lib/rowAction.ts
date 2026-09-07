@@ -55,11 +55,6 @@ export function allActionsFor(pr: PullRequestAssessment): RowAction[] {
   return actions;
 }
 
-/** The one action the row shows. */
-export function rowActionFor(pr: PullRequestAssessment): RowAction | null {
-  return allActionsFor(pr)[0] ?? null;
-}
-
 export const CLOSE_ACTION: RowAction = {
   id: 'close',
   label: 'Close on GitHub',

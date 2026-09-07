@@ -1,6 +1,5 @@
 'use client';
 
-import React from 'react';
 import { RefreshCw, Search } from 'lucide-react';
 import type { Mode } from '../../lib/config';
 import type { DashboardSyncResponse } from '../../types/pr';
