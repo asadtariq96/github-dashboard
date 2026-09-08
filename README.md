@@ -25,6 +25,51 @@ browser tabs.
 The interface is influenced by [OpenSourceUI](https://opensourceui.in/), whose components are
 intended to be copied and customized. It is not installed as a theme dependency.
 
+## How it works
+
+The browser never calls GitHub. Every read and every write goes through a route handler on the
+same machine, and that handler holds the token.
+
+```mermaid
+flowchart LR
+  subgraph B["Browser"]
+    Q["Work queue"]
+    I["Inspector"]
+    LS[("localStorage")]
+  end
+
+  subgraph S["Next.js route handlers, 127.0.0.1 only"]
+    RD["Read routes<br/>api/prs, api/activity, api/events"]
+    WR["Write routes<br/>api/prs/*, api/threads/*"]
+    CA[("In-memory cache")]
+    WH["api/webhook"]
+  end
+
+  G[["GitHub REST + GraphQL"]]
+
+  Q --> RD
+  I --> RD
+  Q -. snoozes, theme, snapshots .- LS
+  Q --> WR
+  WR --> G
+  RD --> CA
+  CA --> G
+  WH --> CA
+```
+
+Three consequences fall out of that shape.
+
+The token stays server-side. There is no login screen to bypass because there is no session to
+steal; the protection is that the socket binds to loopback and the write routes are the only thing
+that can change GitHub state.
+
+There is no database. GitHub is the store and the cache is a short-lived projection of it. Restart
+the server and you lose nothing that matters.
+
+Writes are optimistic and then reconciled. A merge or a dequeue removes the card immediately,
+because GitHub search lags behind its own mutation by a few seconds. If the reconciliation fetch
+disagrees, the card comes back.
+
 ## Requirements
 
 - Node.js 20.9 or newer
