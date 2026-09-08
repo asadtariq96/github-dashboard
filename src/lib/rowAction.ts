@@ -18,10 +18,14 @@ export interface RowAction {
 }
 
 /**
- * Every action this PR state offers, in precedence order. Two orderings are deliberate.
+ * Every action this PR state offers, in precedence order. The orderings are deliberate.
  * Mark ready outranks Update: a draft blocks nobody, and updating its branch changes
  * nothing until it is ready for review. Re-run checks outranks Merge: when checks are red,
- * Merge must not be the control under the pointer.
+ * Merge must not be the control under the pointer. Merge outranks Update: being behind the
+ * base branch only blocks merging when the base branch requires up to date, and GitHub
+ * reports exactly that as mergeStateStatus BEHIND, which normalizes to 'Behind Base Branch'
+ * and drops Merge from this list entirely. So whenever Merge is offered the PR is waiting on
+ * it, and Update is the chore behind it.
  */
 export function allActionsFor(pr: PullRequestAssessment): RowAction[] {
   const actions: RowAction[] = [];
@@ -37,9 +41,6 @@ export function allActionsFor(pr: PullRequestAssessment): RowAction[] {
   if (pr.isDraft) {
     actions.push({ id: 'mark-ready', label: 'Mark ready', confirm: false, tone: 'neutral' });
   }
-  if (pr.mergeability === 'Behind Base Branch' || pr.canUpdateBranch) {
-    actions.push({ id: 'update-branch', label: 'Update', confirm: false, tone: 'neutral' });
-  }
   if (pr.checks === 'Failing' && failedRunUrls(pr).length > 0) {
     actions.push({ id: 'rerun-checks', label: 'Re-run checks', confirm: false, tone: 'neutral' });
   }
@@ -50,6 +51,9 @@ export function allActionsFor(pr: PullRequestAssessment): RowAction[] {
       confirm: true,
       tone: 'danger',
     });
+  }
+  if (pr.mergeability === 'Behind Base Branch' || pr.canUpdateBranch) {
+    actions.push({ id: 'update-branch', label: 'Update', confirm: false, tone: 'neutral' });
   }
 
   return actions;

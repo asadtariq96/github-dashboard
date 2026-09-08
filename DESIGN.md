@@ -133,8 +133,10 @@ bar, status chips, both timestamps, unread count, one primary action.
 **Status is never carried by colour alone.** Every chip has a word or an icon.
 
 **Chips**, at most one state chip and never more than four in total: Deploy hold, Conflicts,
-queue position, Draft, Behind base — then checks (`18/21` plus a divided running count),
-unresolved threads, Changes requested, Stacked.
+queue position, Draft, Behind base, Awaiting review — then checks (`18/21` plus a divided running
+count), unresolved threads, Changes requested, Stacked. **Awaiting review** takes the state slot
+when the only thing left is a review GitHub still requires, so a row that is finished except for
+an approval never reads as unremarkable.
 
 **Two timestamps, and neither replaces the other.** Opened 3 weeks ago and touched an hour
 ago is healthy. Opened 3 weeks ago and untouched for two is dead. Updated turns amber past
@@ -146,14 +148,17 @@ the chips, each of which names its state in words.
 ### The primary action
 
 `allActionsFor` in `src/lib/rowAction.ts` lists what a state offers, in order, and the card
-shows the first. Two orderings are deliberate:
+shows the first. The orderings are deliberate:
 
 1. `approve-deployment`
 2. `mark-ready` — **above** update-branch: a draft blocks nobody, and updating its branch
    changes nothing until it is ready for review
-3. `update-branch`
-4. `rerun-checks` — **above** merge: when checks are red, Merge must not sit under the pointer
-5. `merge`
+3. `rerun-checks` — **above** merge: when checks are red, Merge must not sit under the pointer
+4. `merge` — **above** update-branch: a branch behind its base blocks merging only when the base
+   requires it, and GitHub reports that case as `BEHIND`, which removes Merge from this list
+   altogether. So whenever Merge is offered the pull request is waiting on it, and Update is the
+   chore behind it.
+5. `update-branch`
 
 `close` and `dequeue` are deliberately absent from that list, so neither can ever land as the
 primary. They live on the expanded toolbar, on the right, away from Hide. Both confirm first.

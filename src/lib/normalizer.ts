@@ -256,15 +256,19 @@ export function normalizePullRequests(rawNodes: RawPRNode[]): PullRequestAssessm
       (c) => c.status === 'IN_PROGRESS' || c.status === 'QUEUED',
     );
 
+    // GitHub reports UNSTABLE only when the PR is mergeable, so a red check there is advisory
+    // even when its name is not on the advisory name list above.
+    const verdictSaysMergeable = pr.mergeStateStatus === 'UNSTABLE';
+
     let checks: ChecksStatus = 'None';
-    if (hasFailedRequiredCheck) {
+    if (hasFailedRequiredCheck && !verdictSaysMergeable) {
       checks = 'Failing';
-    } else if (hasFailedNonRequiredCheck || pr.mergeStateStatus === 'UNSTABLE') {
+    } else if (hasFailedNonRequiredCheck || hasFailedRequiredCheck || verdictSaysMergeable) {
       checks = 'Warning';
     } else if (rollupState === 'SUCCESS') {
       checks = 'Passing';
     } else if (rollupState === 'FAILURE' || rollupState === 'ERROR') {
-      checks = hasFailedRequiredCheck ? 'Failing' : 'Warning';
+      checks = hasFailedRequiredCheck && !verdictSaysMergeable ? 'Failing' : 'Warning';
     } else if (rollupState === 'PENDING' || rollupState === 'EXPECTED' || hasRunningCheck) {
       checks = hasRunningCheck ? 'Running' : 'Pending';
     } else if (checkRuns.length > 0) {
@@ -349,14 +353,27 @@ export function normalizePullRequests(rawNodes: RawPRNode[]): PullRequestAssessm
 
     const canUpdateBranch = Boolean(pr.viewerCanUpdateBranch || pr.mergeStateStatus === 'BEHIND');
 
+    // GitHub's own merge verdict. It already accounts for the branch rule (required checks,
+    // required reviews, draft state, conflicts), so prefer it to the local check-name
+    // heuristic. GitHub only computes it on a per-PR read: bulk queries return UNKNOWN, and
+    // the heuristic below is then the best answer available.
+    const verdict = pr.mergeStateStatus;
+
     if (inQueue) {
       mergeability = 'In Merge Queue';
-    } else if (pr.mergeable === 'CONFLICTING') {
+    } else if (pr.mergeable === 'CONFLICTING' || verdict === 'DIRTY') {
       mergeability = 'Merge Conflicts';
-    } else if (pr.mergeStateStatus === 'BEHIND') {
+    } else if (verdict === 'BEHIND') {
       mergeability = 'Behind Base Branch';
+    } else if (verdict === 'BLOCKED' || verdict === 'DRAFT') {
+      mergeability = 'Blocked by Policy';
+    } else if (verdict === 'CLEAN' || verdict === 'UNSTABLE' || verdict === 'HAS_HOOKS') {
+      // GitHub says checks and conflicts do not block. The dashboard still requires an
+      // explicit approval and a non-draft state before it offers Merge.
+      mergeability = review === 'Approved' && !pr.isDraft ? 'Ready to Merge' : 'Blocked by Policy';
     } else if (pr.mergeable === 'MERGEABLE') {
-      // Must pass review, required checks, and not be draft to be Ready to Merge
+      // No verdict yet. Fall back to the local heuristic: must pass review, required checks
+      // and not be draft.
       if (review !== 'Approved' || checks === 'Failing' || pr.isDraft) {
         mergeability = 'Blocked by Policy';
       } else {
