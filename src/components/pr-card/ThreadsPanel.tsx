@@ -10,7 +10,7 @@ import {
   Loader2,
   RotateCcw,
 } from 'lucide-react';
-import type { PullRequestAssessment, ReviewThreadItem } from '../../types/pr';
+import type { PullRequestAssessment, ReviewThreadItem, ThreadComment } from '../../types/pr';
 import { compactAge } from '../../lib/time';
 import { Avatar, CountPill } from './ui';
 import {
@@ -117,6 +117,65 @@ function ReplyBox({
         {error && <span className="text-2xs text-danger">{error}</span>}
       </div>
     </div>
+  );
+}
+
+const REVIEW_STATE_LABEL: Record<string, string> = {
+  APPROVED: 'approved',
+  CHANGES_REQUESTED: 'requested changes',
+  COMMENTED: 'reviewed',
+  DISMISSED: 'dismissed review',
+};
+
+function PrCommentCard({ comment, unread }: { comment: ThreadComment; unread: boolean }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <li className="defer-row" style={{ '--row-estimate': '76px' } as React.CSSProperties}>
+      <div className="px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <Avatar name={comment.author} src={comment.authorAvatarUrl} />
+          <span className="text-xs font-semibold text-ink">{comment.author}</span>
+          <span className="text-2xs text-dim">
+            {REVIEW_STATE_LABEL[comment.reviewState || ''] || 'commented'}{' '}
+            {compactAge(comment.createdAt)}
+          </span>
+          <span
+            aria-hidden
+            className={`ml-auto h-[7px] w-[7px] shrink-0 rounded-full ${unread ? 'bg-accent' : 'bg-line-strong'}`}
+          />
+          <span className="sr-only">{unread ? 'Unread' : 'Read'}</span>
+          <a
+            href={comment.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Open this comment by ${comment.author} on GitHub`}
+            className={ICON_BUTTON}
+          >
+            <ExternalLink aria-hidden strokeWidth={2} className="h-3 w-3" />
+          </a>
+          <button
+            type="button"
+            onClick={() => setOpen(!open)}
+            aria-expanded={open}
+            aria-label={open ? 'Collapse this comment' : 'Expand this comment'}
+            className={ICON_BUTTON}
+          >
+            <ChevronDown
+              aria-hidden
+              strokeWidth={2}
+              className={`h-3.5 w-3.5 transition-transform duration-fast ease-out ${open ? 'rotate-180' : ''}`}
+            />
+          </button>
+        </div>
+
+        {open ? (
+          <div className="md mt-2 text-xs" dangerouslySetInnerHTML={{ __html: comment.bodyHTML }} />
+        ) : (
+          <p className="mt-1.5 truncate text-xs text-muted">{comment.bodyText}</p>
+        )}
+      </div>
+    </li>
   );
 }
 
@@ -296,11 +355,15 @@ export function ThreadsPanel({
   openFirst?: boolean;
   fill?: boolean;
 }) {
+  const comments = pr.prComments ?? [];
+  const isUnread = (ts: string) =>
+    unreadSinceMs > 0 && Boolean(ts) && new Date(ts).getTime() > unreadSinceMs;
+
   return (
     <section className={panelRoot(fill)}>
       <header className={PANEL_HEAD}>
-        <span className="font-bold text-ink">Unresolved threads</span>
-        <CountPill>{pr.unresolvedThreads.length}</CountPill>
+        <span className="font-bold text-ink">Comments and unresolved threads</span>
+        <CountPill>{comments.length + pr.unresolvedThreads.length}</CountPill>
         <a
           href={`${pr.url}/files`}
           target="_blank"
@@ -311,20 +374,23 @@ export function ThreadsPanel({
         </a>
       </header>
 
-      {pr.unresolvedThreads.length === 0 ? (
-        <p className={PANEL_EMPTY}>Every review thread is resolved.</p>
+      {comments.length === 0 && pr.unresolvedThreads.length === 0 ? (
+        <p className={PANEL_EMPTY}>Nobody commented, and every review thread is resolved.</p>
       ) : (
         <ul className={panelScroller(fill)}>
+          {comments.map((comment) => (
+            <PrCommentCard
+              key={comment.id}
+              comment={comment}
+              unread={isUnread(comment.createdAt)}
+            />
+          ))}
           {pr.unresolvedThreads.map((thread, i) => (
             <ThreadCard
               key={thread.id}
               thread={thread}
               defaultOpen={openFirst && i === 0}
-              unread={
-                unreadSinceMs > 0 &&
-                Boolean(thread.createdAt) &&
-                new Date(thread.createdAt).getTime() > unreadSinceMs
-              }
+              unread={isUnread(thread.createdAt)}
               onChanged={onChanged}
             />
           ))}

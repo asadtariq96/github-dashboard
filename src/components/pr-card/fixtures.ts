@@ -134,6 +134,16 @@ const base: PullRequestAssessment = {
       ['asad'],
     ),
   ],
+  prComments: [
+    {
+      id: 'prc1',
+      author: 'omar-k',
+      bodyHTML: '<p>Please rebase before this goes in.</p>',
+      bodyText: 'Please rebase before this goes in.',
+      createdAt: hoursAgo(4),
+      url: 'https://github.com/acme/platform/pull/2487#issuecomment-1',
+    },
+  ],
 };
 
 export const FIXTURES: { label: string; pr: PullRequestAssessment }[] = [

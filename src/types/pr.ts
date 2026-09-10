@@ -87,6 +87,8 @@ export interface ThreadComment {
   bodyText: string;
   createdAt: string;
   url: string;
+  /** Set on a review summary: APPROVED, CHANGES_REQUESTED or COMMENTED. */
+  reviewState?: string;
 }
 
 export interface ReviewThreadItem {
@@ -215,6 +217,8 @@ export interface PullRequestAssessment {
   // Detail Drawer items
   checkRuns: CheckRunItem[];
   unresolvedThreads: ReviewThreadItem[];
+  /** Conversation-level comments and review summaries, oldest first. */
+  prComments: ThreadComment[];
 }
 
 export interface ActivityItem {
