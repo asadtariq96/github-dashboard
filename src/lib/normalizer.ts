@@ -81,6 +81,8 @@ interface RawPRNode {
   mergeable: string; // 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN'
   isInMergeQueue: boolean;
   viewerCanUpdateBranch?: boolean;
+  viewerCanEnableAutoMerge?: boolean;
+  autoMergeRequest?: { enabledAt?: string | null } | null;
   mergeStateStatus?: string; // 'BEHIND', 'BLOCKED', 'CLEAN', 'DIRTY', 'DRAFT', 'HAS_HOOKS', 'UNKNOWN', 'UNSTABLE'
   mergeQueueEntry?: {
     id?: string;
@@ -349,6 +351,8 @@ export function normalizePullRequests(rawNodes: RawPRNode[]): PullRequestAssessm
 
     const canUpdateBranch = Boolean(pr.viewerCanUpdateBranch || pr.mergeStateStatus === 'BEHIND');
 
+    const checksUnfinished = checks === 'Running' || checks === 'Pending';
+
     if (inQueue) {
       mergeability = 'In Merge Queue';
     } else if (pr.mergeable === 'CONFLICTING') {
@@ -357,13 +361,14 @@ export function normalizePullRequests(rawNodes: RawPRNode[]): PullRequestAssessm
       mergeability = 'Behind Base Branch';
     } else if (pr.mergeable === 'MERGEABLE') {
       // Must pass review, required checks, and not be draft to be Ready to Merge
-      if (review !== 'Approved' || checks === 'Failing' || pr.isDraft) {
+      if (review !== 'Approved' || checks === 'Failing' || checksUnfinished || pr.isDraft) {
         mergeability = 'Blocked by Policy';
       } else {
         mergeability = 'Ready to Merge';
       }
     } else {
-      if (checks === 'Failing' || review !== 'Approved') mergeability = 'Blocked by Policy';
+      if (checks === 'Failing' || checksUnfinished || review !== 'Approved')
+        mergeability = 'Blocked by Policy';
       else mergeability = 'Unknown';
     }
 
@@ -412,6 +417,8 @@ export function normalizePullRequests(rawNodes: RawPRNode[]): PullRequestAssessm
       isInMergeQueue: inQueue,
       hasRepoMergeQueue: Boolean(pr.repository.mergeQueue),
       canUpdateBranch,
+      autoMergeEnabled: Boolean(pr.autoMergeRequest),
+      canEnableAutoMerge: Boolean(pr.viewerCanEnableAutoMerge),
       mergeQueueInfo,
       checkRuns,
       unresolvedThreads,
@@ -473,6 +480,8 @@ export function normalizePullRequests(rawNodes: RawPRNode[]): PullRequestAssessm
       isInMergeQueue: pr.isInMergeQueue,
       hasRepoMergeQueue: pr.hasRepoMergeQueue,
       canUpdateBranch: pr.canUpdateBranch,
+      autoMergeEnabled: pr.autoMergeEnabled,
+      canEnableAutoMerge: pr.canEnableAutoMerge,
       mergeQueueInfo: pr.mergeQueueInfo,
       checkRuns: pr.checkRuns,
       unresolvedThreads: pr.unresolvedThreads,

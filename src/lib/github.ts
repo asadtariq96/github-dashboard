@@ -70,6 +70,19 @@ mutation EnqueuePullRequest($input: EnqueuePullRequestInput!) {
 }
 `;
 
+export const ENABLE_AUTO_MERGE_MUTATION = `
+mutation EnableAutoMerge($input: EnablePullRequestAutoMergeInput!) {
+  enablePullRequestAutoMerge(input: $input) {
+    pullRequest {
+      id
+      autoMergeRequest {
+        enabledAt
+      }
+    }
+  }
+}
+`;
+
 export const MARK_READY_MUTATION = `
 mutation MarkReady($input: MarkPullRequestReadyForReviewInput!) {
   markPullRequestReadyForReview(input: $input) {
@@ -300,6 +313,10 @@ query FetchOpenPullRequests($query: String!, $first: Int!, $after: String) {
         mergeable
         isInMergeQueue
         viewerCanUpdateBranch
+        viewerCanEnableAutoMerge
+        autoMergeRequest {
+          enabledAt
+        }
         mergeStateStatus
         mergeQueueEntry {
           id
