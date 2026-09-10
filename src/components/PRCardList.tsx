@@ -249,8 +249,8 @@ export function PRCardList({
       else if (key === 'r') void onRefresh?.();
       else if (activePR && ['1', '2', '3', '4', '5'].includes(key)) {
         const tabs: TabId[] = activePR.isInMergeQueue
-          ? ['description', 'queue', 'checks', 'threads', 'files']
-          : ['description', 'checks', 'threads', 'files'];
+          ? ['description', 'queue', 'checks', 'comments', 'files']
+          : ['description', 'checks', 'comments', 'files'];
         const next = tabs[Number(key) - 1];
         if (next) setActiveTab(next);
       } else return;
