@@ -1,0 +1,118 @@
+name: pr-screenshots
+
+# Build the base branch and the pull request head, screenshot the same routes
+# from both, and write the pairs into the pull request body.
+#
+# The routes live in ROUTES below. CAPTURE_FLAGS are passed straight to
+# tools/pr-screenshots/capture.mjs, so `--full-page 1 --unclip 1` means "capture
+# the whole page, and undo the app shell's overflow:hidden while you do it".
+# Drop them to capture the viewport only.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: pr-screenshots-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      ROUTES: /design/cards
+      THEMES: light,dark
+      CAPTURE_FLAGS: --full-page 1 --unclip 1
+      BEFORE_PORT: '3100'
+      AFTER_PORT: '3101'
+    steps:
+      - name: Check out this pull request
+        uses: actions/checkout@v4
+        with:
+          path: after
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Check out the base branch
+        uses: actions/checkout@v4
+        with:
+          path: before
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          # npm 10, which ships with Node 22, rejects package-lock.json: it
+          # carries @pierre/theme 2.0.0 for a range that asks for 1.1.0. npm 11
+          # resolves it, so pin a version that ships npm 11.
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            before/package-lock.json
+            after/package-lock.json
+
+      - name: Install both variants
+        run: |
+          (cd before && npm ci)
+          (cd after && npm ci)
+
+      - name: Build both variants
+        run: |
+          (cd before && npm run build)
+          (cd after && npm run build)
+
+      - name: Install the browser
+        working-directory: after
+        run: npx playwright install --with-deps chromium
+
+      - name: Serve both variants
+        run: |
+          (cd before && npm run start -- -p "$BEFORE_PORT" > ../before.log 2>&1 &)
+          (cd after && npm run start -- -p "$AFTER_PORT" > ../after.log 2>&1 &)
+          for _ in $(seq 1 60); do
+            up=1
+            curl -sf -o /dev/null -m 5 "http://127.0.0.1:$BEFORE_PORT$ROUTES" || up=0
+            curl -sf -o /dev/null -m 5 "http://127.0.0.1:$AFTER_PORT$ROUTES" || up=0
+            if [ "$up" = "1" ]; then
+              echo "both variants answer on $ROUTES"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "the variants did not come up"
+          tail -20 before.log || true
+          tail -20 after.log || true
+          exit 1
+
+      - name: Capture both variants
+        working-directory: after
+        run: |
+          node tools/pr-screenshots/capture.mjs \
+            --base-url "http://127.0.0.1:$BEFORE_PORT" --variant before \
+            --out ../shots --routes "$ROUTES" --themes "$THEMES" $CAPTURE_FLAGS
+          node tools/pr-screenshots/capture.mjs \
+            --base-url "http://127.0.0.1:$AFTER_PORT" --variant after \
+            --out ../shots --routes "$ROUTES" --themes "$THEMES" $CAPTURE_FLAGS
+
+      - name: Keep the captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-screenshots
+          path: shots
+          retention-days: 7
+
+      - name: Post them to the pull request
+        working-directory: after
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node tools/pr-screenshots/post.mjs \
+            --pr "${{ github.event.pull_request.number }}" \
+            --shots-dir ../shots \
+            --routes "$ROUTES" --themes "$THEMES" \
+            --commit "${{ github.event.pull_request.head.sha }}"
