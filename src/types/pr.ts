@@ -208,6 +208,8 @@ export interface PullRequestAssessment {
   isInMergeQueue: boolean;
   hasRepoMergeQueue?: boolean;
   canUpdateBranch?: boolean;
+  autoMergeEnabled?: boolean;
+  canEnableAutoMerge?: boolean;
   mergeQueueInfo?: MergeQueueInfo;
 
   // Detail Drawer items

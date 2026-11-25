@@ -5,6 +5,7 @@ export type RowActionId =
   | 'update-branch'
   | 'rerun-checks'
   | 'merge'
+  | 'auto-merge'
   | 'mark-ready'
   | 'dequeue'
   | 'close';
@@ -42,6 +43,22 @@ export function allActionsFor(pr: PullRequestAssessment): RowAction[] {
   }
   if (pr.checks === 'Failing' && failedRunUrls(pr).length > 0) {
     actions.push({ id: 'rerun-checks', label: 'Re-run checks', confirm: false, tone: 'neutral' });
+  }
+  if (
+    (pr.checks === 'Running' || pr.checks === 'Pending') &&
+    pr.review === 'Approved' &&
+    pr.mergeability === 'Blocked by Policy' &&
+    pr.canEnableAutoMerge &&
+    !pr.autoMergeEnabled &&
+    !pr.isInMergeQueue &&
+    !pr.isDraft
+  ) {
+    actions.push({
+      id: 'auto-merge',
+      label: 'Merge when ready',
+      confirm: true,
+      tone: 'danger',
+    });
   }
   if (pr.mergeability === 'Ready to Merge' && !pr.isInMergeQueue && !pr.isDraft) {
     actions.push({

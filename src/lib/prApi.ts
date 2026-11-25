@@ -38,6 +38,12 @@ export function buildActionCall(pr: PullRequestAssessment, id: RowActionId): Act
         body: { prId: pr.id, enqueue: Boolean(pr.hasRepoMergeQueue), mergeMethod: 'SQUASH' },
         done: pr.hasRepoMergeQueue ? `Added #${pr.number} to the queue` : `Merged #${pr.number}`,
       };
+    case 'auto-merge':
+      return {
+        url: '/api/prs/auto-merge',
+        body: { prId: pr.id, mergeMethod: 'SQUASH' },
+        done: `#${pr.number} merges once checks pass`,
+      };
     case 'mark-ready':
       return {
         url: '/api/prs/mark-ready',
@@ -63,6 +69,8 @@ export function confirmDetailFor(id: RowActionId, pr: PullRequestAssessment): st
   switch (id) {
     case 'merge':
       return `${pr.title}\n\nThis cannot be undone.`;
+    case 'auto-merge':
+      return `${pr.title}\n\nGitHub merges it as soon as every required check passes. Nobody looks at it again first.`;
     case 'approve-deployment':
       return `${pr.mergeQueueInfo?.approvalStepName || 'Manual approval'} on ${pr.repository.nameWithOwner}. This cannot be undone.`;
     case 'close':
