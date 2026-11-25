@@ -33,7 +33,7 @@ The aggregate peer-review state evaluated from reviewer decisions (`Approved`, `
 _Avoid_: Review score, approval status
 
 **Checks Dimension**:
-The aggregate validation state of CI/CD pipelines and commit status checks (`Passing`, `Failing` [required check failed], `Warning` [optional check failed / unstable], `Running`, `Pending`, or `None`).
+The aggregate validation state of CI/CD pipelines and commit status checks (`Passing`, `Failing` [a required check failed], `Warning` [an optional check failed, or GitHub reports the pull request `UNSTABLE`], `Running`, `Pending`, or `None`). A check counts as required when GitHub's merge verdict says it blocks the merge, not when its name appears in a local list.
 _Avoid_: Build state, CI health
 
 **Branch Update Action**:
@@ -41,7 +41,7 @@ A user-initiated command from the dashboard that synchronizes a pull request hea
 _Avoid_: Git pull, rebase button
 
 **Mergeability Dimension**:
-The technical and policy readiness of the branch to merge into the base branch (`Ready to Merge` [requires explicit approval, passing checks, no conflicts, and non-draft], `In Merge Queue` [with sub-states: Queued, Running, or Waiting for Approval], `Merge Conflicts`, `Behind Base Branch`, or `Blocked by Policy`).
+The technical and policy readiness of the branch to merge into the base branch (`Ready to Merge` [GitHub reports the pull request mergeable — `CLEAN`, `UNSTABLE`, or `HAS_HOOKS` — and the dashboard holds an explicit approval on a non-draft], `In Merge Queue` [with sub-states: Queued, Running, or Waiting for Approval], `Merge Conflicts`, `Behind Base Branch`, or `Blocked by Policy`).
 _Avoid_: Merge state, git status
 
 **Merge Action**:
@@ -81,6 +81,10 @@ _Avoid_: Modal, popup, expanded row
 **Status Chip**:
 A bordered label rendered only when an active blocker, milestone, or notable state exists, carrying a word or an icon beside its colour. Neutral baseline states are omitted.
 _Avoid_: Badge, pill, static column badge
+
+**Awaiting Review Chip**:
+The status chip that takes the state slot when every check passes, the pull request is not a draft, and the only remaining blocker is a review GitHub still requires (`Blocked by Policy` with `Review Required`). It states the wait in words, because the row otherwise looks finished.
+_Avoid_: Pending approval, needs reviewer
 
 **Severity Edge**:
 The former 3px coloured left border of a PR card. It was removed. Urgency now reads from the sort order, the state icon and the status chips.

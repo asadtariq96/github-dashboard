@@ -3,6 +3,7 @@
 import {
   CircleCheck,
   CircleX,
+  Clock,
   FileText,
   GitMerge,
   Layers,
@@ -52,10 +53,25 @@ function ChecksChip({ pr }: { pr: PullRequestAssessment }) {
 
 /**
  * At most one state chip, then checks, then threads. The state chips are mutually
- * exclusive by construction, so the cluster never grows past four.
+ * exclusive by construction, so the cluster never grows past four. A pull request whose
+ * only remaining blocker is a review gets the quiet "Awaiting review" chip in the state
+ * slot, so a row that is finished except for an approval never reads as unremarkable.
  */
 export function StatusChips({ pr }: { pr: PullRequestAssessment }) {
   const queuePosition = pr.mergeQueueInfo?.position;
+  // At most one state chip. A pull request that only waits for a review has no state of
+  // its own, so it gets a quiet chip instead of leaving the row looking unremarkable.
+  const hasStateChip =
+    Boolean(pr.mergeQueueInfo?.isWaitingForApproval) ||
+    pr.mergeability === 'Merge Conflicts' ||
+    pr.isInMergeQueue ||
+    pr.isDraft ||
+    pr.mergeability === 'Behind Base Branch';
+  const awaitingReview =
+    !hasStateChip &&
+    pr.mergeability === 'Blocked by Policy' &&
+    pr.review === 'Review Required' &&
+    pr.checks === 'Passing';
 
   return (
     <>
@@ -99,6 +115,16 @@ export function StatusChips({ pr }: { pr: PullRequestAssessment }) {
           Behind base
         </Chip>
       ) : null}
+
+      {awaitingReview && (
+        <Chip
+          icon={Clock}
+          iconClass="text-dim"
+          title="Every check passes. A review is still missing."
+        >
+          Awaiting review
+        </Chip>
+      )}
 
       <ChecksChip pr={pr} />
 
