@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import {
   CircleCheck,
@@ -9,24 +9,24 @@ import {
   ListChecks,
   MessageSquare,
   Rocket,
-} from 'lucide-react';
-import type { PullRequestAssessment } from '../../types/pr';
-import { summarizeChecks } from '../../lib/checks';
-import { Chip } from './ui';
+} from "lucide-react";
+import type { PullRequestAssessment } from "../../types/pr";
+import { summarizeChecks } from "../../lib/checks";
+import { Chip } from "./ui";
 
 function ChecksChip({ pr }: { pr: PullRequestAssessment }) {
   const { total, passed, failed, running } = summarizeChecks(pr);
   if (total === 0) return null;
 
   const Icon = failed > 0 ? CircleX : CircleCheck;
-  const iconClass = failed > 0 ? 'text-danger' : 'text-ready';
+  const iconClass = failed > 0 ? "text-danger" : "text-ready";
   const detail = [
     `${passed} of ${total} checks passed`,
     failed > 0 ? `${failed} failed` : null,
     running > 0 ? `${running} running` : null,
   ]
     .filter(Boolean)
-    .join(', ');
+    .join(", ");
 
   return (
     <Chip icon={Icon} iconClass={iconClass} title={detail}>
@@ -43,15 +43,43 @@ function ChecksChip({ pr }: { pr: PullRequestAssessment }) {
       {failed > 0 && (
         <>
           <span aria-hidden className="h-3.5 w-px bg-line" />
-          <span className="tabular font-semibold text-danger">{failed} failed</span>
+          <span className="tabular font-semibold text-danger">
+            {failed} failed
+          </span>
         </>
       )}
     </Chip>
   );
 }
 
+/** Comments on the pull request itself, then unresolved threads on the code. */
+function ConversationChip({ pr }: { pr: PullRequestAssessment }) {
+  const comments = pr.prComments?.length ?? 0;
+  const threads = pr.unresolvedThreadsCount;
+  if (comments === 0 && threads === 0) return null;
+
+  return (
+    <Chip
+      icon={MessageSquare}
+      title={`${comments} comments, ${threads} unresolved review threads`}
+    >
+      {comments > 0 && (
+        <span className="tabular font-semibold text-ink">{comments}</span>
+      )}
+      {comments > 0 && threads > 0 && (
+        <span aria-hidden className="h-3.5 w-px bg-line" />
+      )}
+      {threads > 0 && (
+        <span className="tabular font-semibold text-ink">
+          {threads} <span className="font-medium text-muted">unresolved</span>
+        </span>
+      )}
+    </Chip>
+  );
+}
+
 /**
- * At most one state chip, then checks, then threads. The state chips are mutually
+ * At most one state chip, then checks, then the conversation. The state chips are mutually
  * exclusive by construction, so the cluster never grows past four.
  */
 export function StatusChips({ pr }: { pr: PullRequestAssessment }) {
@@ -64,11 +92,14 @@ export function StatusChips({ pr }: { pr: PullRequestAssessment }) {
           icon={Rocket}
           iconClass="text-warn"
           tone="warn"
-          title={pr.mergeQueueInfo.approvalStepName || 'A deployment is waiting for your approval'}
+          title={
+            pr.mergeQueueInfo.approvalStepName ||
+            "A deployment is waiting for your approval"
+          }
         >
           Deploy hold
         </Chip>
-      ) : pr.mergeability === 'Merge Conflicts' ? (
+      ) : pr.mergeability === "Merge Conflicts" ? (
         <Chip
           icon={GitMerge}
           iconClass="text-danger"
@@ -85,30 +116,35 @@ export function StatusChips({ pr }: { pr: PullRequestAssessment }) {
           title={
             queuePosition
               ? `Position ${queuePosition} in the merge queue`
-              : 'Waiting in the merge queue'
+              : "Waiting in the merge queue"
           }
         >
-          {queuePosition ? `#${queuePosition} in queue` : 'In queue'}
+          {queuePosition ? `#${queuePosition} in queue` : "In queue"}
         </Chip>
       ) : pr.isDraft ? (
-        <Chip icon={FileText} tone="draft" title="Draft. Reviewers are not notified.">
+        <Chip
+          icon={FileText}
+          tone="draft"
+          title="Draft. Reviewers are not notified."
+        >
           Draft
         </Chip>
-      ) : pr.mergeability === 'Behind Base Branch' ? (
-        <Chip icon={GitMerge} iconClass="text-warn" tone="warn" title="Behind the base branch">
+      ) : pr.mergeability === "Behind Base Branch" ? (
+        <Chip
+          icon={GitMerge}
+          iconClass="text-warn"
+          tone="warn"
+          title="Behind the base branch"
+        >
           Behind base
         </Chip>
       ) : null}
 
       <ChecksChip pr={pr} />
 
-      {pr.unresolvedThreadsCount > 0 && (
-        <Chip icon={MessageSquare} title={`${pr.unresolvedThreadsCount} unresolved review threads`}>
-          <span className="tabular font-semibold text-ink">{pr.unresolvedThreadsCount}</span>
-        </Chip>
-      )}
+      <ConversationChip pr={pr} />
 
-      {pr.review === 'Changes Requested' && (
+      {pr.review === "Changes Requested" && (
         <Chip
           icon={CircleX}
           iconClass="text-danger"

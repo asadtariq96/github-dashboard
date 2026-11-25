@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   Check,
   ChevronDown,
@@ -9,10 +9,14 @@ import {
   ExternalLink,
   Loader2,
   RotateCcw,
-} from 'lucide-react';
-import type { PullRequestAssessment, ReviewThreadItem } from '../../types/pr';
-import { compactAge } from '../../lib/time';
-import { Avatar, CountPill } from './ui';
+} from "lucide-react";
+import type {
+  PullRequestAssessment,
+  ReviewThreadItem,
+  ThreadComment,
+} from "../../types/pr";
+import { compactAge } from "../../lib/time";
+import { Avatar, CountPill } from "./ui";
 import {
   ICON_BUTTON,
   PANEL_EMPTY,
@@ -20,21 +24,24 @@ import {
   PANEL_LINK,
   panelRoot,
   panelScroller,
-} from './panelChrome';
+} from "./panelChrome";
 
 async function post(url: string, body: unknown): Promise<void> {
   const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok || json?.ok === false) throw new Error(json?.error || `HTTP ${res.status}`);
+  if (!res.ok || json?.ok === false)
+    throw new Error(json?.error || `HTTP ${res.status}`);
 }
 
 function CodeRef({ thread }: { thread: ReviewThreadItem }) {
   const lines =
-    thread.startLine !== null && thread.line !== null && thread.startLine !== thread.line
+    thread.startLine !== null &&
+    thread.line !== null &&
+    thread.startLine !== thread.line
       ? `Lines ${thread.startLine}–${thread.line}`
       : thread.line !== null
         ? `Line ${thread.line}`
@@ -63,20 +70,20 @@ function ReplyBox({
   /** Awaited, so a spinner covers the refresh as well as the write. */
   onDone: () => Promise<void> | void;
 }) {
-  const [body, setBody] = useState('');
+  const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const send = async () => {
-    if (body.trim() === '' || busy) return;
+    if (body.trim() === "" || busy) return;
     setBusy(true);
     setError(null);
     try {
-      await post('/api/threads/reply', { threadId: thread.id, body });
-      setBody('');
+      await post("/api/threads/reply", { threadId: thread.id, body });
+      setBody("");
       await onDone();
     } catch (err: any) {
-      setError(err.message || 'Could not post the reply');
+      setError(err.message || "Could not post the reply");
     } finally {
       setBusy(false);
     }
@@ -88,7 +95,7 @@ function ReplyBox({
         value={body}
         onChange={(e) => setBody(e.target.value)}
         onKeyDown={(e) => {
-          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
             e.preventDefault();
             void send();
           }
@@ -103,13 +110,17 @@ function ReplyBox({
         <button
           type="button"
           onClick={send}
-          disabled={busy || body.trim() === ''}
+          disabled={busy || body.trim() === ""}
           className="tap-safe inline-flex items-center gap-1.5 rounded-md bg-accent-fill px-2.5 py-1.5 text-xs font-semibold text-accent-on transition-colors duration-instant ease-out hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-45"
         >
           {busy ? (
             <Loader2 aria-hidden className="h-[13px] w-[13px] animate-spin" />
           ) : (
-            <CornerDownRight aria-hidden strokeWidth={2} className="h-[13px] w-[13px]" />
+            <CornerDownRight
+              aria-hidden
+              strokeWidth={2}
+              className="h-[13px] w-[13px]"
+            />
           )}
           Reply
         </button>
@@ -117,6 +128,81 @@ function ReplyBox({
         {error && <span className="text-2xs text-danger">{error}</span>}
       </div>
     </div>
+  );
+}
+
+const REVIEW_STATE_LABEL: Record<string, string> = {
+  APPROVED: "approved",
+  CHANGES_REQUESTED: "requested changes",
+  COMMENTED: "reviewed",
+  DISMISSED: "dismissed review",
+};
+
+function PrCommentCard({
+  comment,
+  unread,
+}: {
+  comment: ThreadComment;
+  unread: boolean;
+}) {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <li
+      className="defer-row"
+      style={{ "--row-estimate": "76px" } as React.CSSProperties}
+    >
+      <div className="px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <Avatar name={comment.author} src={comment.authorAvatarUrl} />
+          <span className="text-xs font-semibold text-ink">
+            {comment.author}
+          </span>
+          <span className="text-2xs text-dim">
+            {REVIEW_STATE_LABEL[comment.reviewState || ""] || "commented"}{" "}
+            {compactAge(comment.createdAt)}
+          </span>
+          <span
+            aria-hidden
+            className={`ml-auto h-[7px] w-[7px] shrink-0 rounded-full ${unread ? "bg-accent" : "bg-line-strong"}`}
+          />
+          <span className="sr-only">{unread ? "Unread" : "Read"}</span>
+          <a
+            href={comment.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Open this comment by ${comment.author} on GitHub`}
+            className={ICON_BUTTON}
+          >
+            <ExternalLink aria-hidden strokeWidth={2} className="h-3 w-3" />
+          </a>
+          <button
+            type="button"
+            onClick={() => setOpen(!open)}
+            aria-expanded={open}
+            aria-label={open ? "Collapse this comment" : "Expand this comment"}
+            className={ICON_BUTTON}
+          >
+            <ChevronDown
+              aria-hidden
+              strokeWidth={2}
+              className={`h-3.5 w-3.5 transition-transform duration-fast ease-out ${open ? "rotate-180" : ""}`}
+            />
+          </button>
+        </div>
+
+        {open ? (
+          <div
+            className="md mt-2 text-xs"
+            dangerouslySetInnerHTML={{ __html: comment.bodyHTML }}
+          />
+        ) : (
+          <p className="mt-1.5 truncate text-xs text-muted">
+            {comment.bodyText}
+          </p>
+        )}
+      </div>
+    </li>
   );
 }
 
@@ -136,33 +222,42 @@ function ThreadCard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canToggleResolve = thread.isResolved ? thread.viewerCanUnresolve : thread.viewerCanResolve;
+  const canToggleResolve = thread.isResolved
+    ? thread.viewerCanUnresolve
+    : thread.viewerCanResolve;
 
   const toggleResolved = async () => {
     if (busy) return;
     setBusy(true);
     setError(null);
     try {
-      await post('/api/threads/resolve', {
+      await post("/api/threads/resolve", {
         threadId: thread.id,
         resolved: !thread.isResolved,
       });
       await onChanged();
     } catch (err: any) {
-      setError(err.message || 'Could not change the thread');
+      setError(err.message || "Could not change the thread");
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <li className="defer-row" style={{ '--row-estimate': '96px' } as React.CSSProperties}>
+    <li
+      className="defer-row"
+      style={{ "--row-estimate": "96px" } as React.CSSProperties}
+    >
       <div className="px-3 py-2.5">
         <div className="flex items-center gap-2">
           <Avatar name={thread.author} src={thread.authorAvatarUrl} />
-          <span className="text-xs font-semibold text-ink">{thread.author}</span>
+          <span className="text-xs font-semibold text-ink">
+            {thread.author}
+          </span>
           {thread.createdAt && (
-            <span className="text-2xs text-dim">commented {compactAge(thread.createdAt)}</span>
+            <span className="text-2xs text-dim">
+              commented {compactAge(thread.createdAt)}
+            </span>
           )}
           {thread.isOutdated && (
             <span className="shrink-0 rounded-sm bg-surface-muted px-1 text-2xs text-dim">
@@ -177,23 +272,25 @@ function ThreadCard({
           )}
           <span
             aria-hidden
-            className={`ml-auto h-[7px] w-[7px] shrink-0 rounded-full ${unread ? 'bg-accent' : 'bg-line-strong'}`}
+            className={`ml-auto h-[7px] w-[7px] shrink-0 rounded-full ${unread ? "bg-accent" : "bg-line-strong"}`}
           />
-          <span className="sr-only">{unread ? 'Unread' : 'Read'}</span>
+          <span className="sr-only">{unread ? "Unread" : "Read"}</span>
 
           <button
             type="button"
             onClick={() => setOpen(!open)}
             aria-expanded={open}
             aria-label={
-              open ? `Collapse the thread on ${thread.path}` : `Expand the thread on ${thread.path}`
+              open
+                ? `Collapse the thread on ${thread.path}`
+                : `Expand the thread on ${thread.path}`
             }
             className={ICON_BUTTON}
           >
             <ChevronDown
               aria-hidden
               strokeWidth={2}
-              className={`h-3.5 w-3.5 transition-transform duration-fast ease-out ${open ? 'rotate-180' : ''}`}
+              className={`h-3.5 w-3.5 transition-transform duration-fast ease-out ${open ? "rotate-180" : ""}`}
             />
           </button>
         </div>
@@ -202,7 +299,11 @@ function ThreadCard({
           <CodeRef thread={thread} />
         </div>
 
-        {!open && <p className="mt-1.5 truncate text-xs text-muted">{thread.bodyPreview}</p>}
+        {!open && (
+          <p className="mt-1.5 truncate text-xs text-muted">
+            {thread.bodyPreview}
+          </p>
+        )}
 
         {!open && thread.replyCount > 0 && (
           <div className="mt-2 flex items-center gap-2 border-t border-dashed border-line-subtle pt-1.5">
@@ -210,14 +311,15 @@ function ThreadCard({
               {thread.replies.slice(0, 3).map((reply, i) => (
                 <span
                   key={reply.login}
-                  className={`rounded-full ring-[1.5px] ring-surface ${i === 0 ? '' : '-ml-1'}`}
+                  className={`rounded-full ring-[1.5px] ring-surface ${i === 0 ? "" : "-ml-1"}`}
                 >
                   <Avatar name={reply.login} src={reply.avatarUrl} size={16} />
                 </span>
               ))}
             </span>
             <span className="truncate text-2xs text-dim">
-              {thread.replyCount} {thread.replyCount === 1 ? 'reply' : 'replies'}
+              {thread.replyCount}{" "}
+              {thread.replyCount === 1 ? "reply" : "replies"}
             </span>
           </div>
         )}
@@ -231,9 +333,17 @@ function ThreadCard({
                   className="rounded-md border border-line bg-surface-muted/40 p-2.5"
                 >
                   <div className="flex items-center gap-2">
-                    <Avatar name={comment.author} src={comment.authorAvatarUrl} size={18} />
-                    <span className="text-2xs font-semibold text-ink">{comment.author}</span>
-                    <span className="text-2xs text-dim">{compactAge(comment.createdAt)}</span>
+                    <Avatar
+                      name={comment.author}
+                      src={comment.authorAvatarUrl}
+                      size={18}
+                    />
+                    <span className="text-2xs font-semibold text-ink">
+                      {comment.author}
+                    </span>
+                    <span className="text-2xs text-dim">
+                      {compactAge(comment.createdAt)}
+                    </span>
                     <a
                       href={comment.url}
                       target="_blank"
@@ -241,7 +351,11 @@ function ThreadCard({
                       aria-label={`Open this comment by ${comment.author} on GitHub`}
                       className={`${ICON_BUTTON} ml-auto`}
                     >
-                      <ExternalLink aria-hidden strokeWidth={2} className="h-3 w-3" />
+                      <ExternalLink
+                        aria-hidden
+                        strokeWidth={2}
+                        className="h-3 w-3"
+                      />
                     </a>
                   </div>
                   <div
@@ -252,7 +366,9 @@ function ThreadCard({
               ))}
             </ul>
 
-            {thread.viewerCanReply && <ReplyBox thread={thread} onDone={onChanged} />}
+            {thread.viewerCanReply && (
+              <ReplyBox thread={thread} onDone={onChanged} />
+            )}
 
             <div className="flex items-center gap-2">
               {canToggleResolve && (
@@ -263,13 +379,24 @@ function ThreadCard({
                   className="tap-safe inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-muted transition-colors duration-instant ease-out hover:bg-surface-muted hover:text-ink disabled:opacity-45"
                 >
                   {busy ? (
-                    <Loader2 aria-hidden className="h-[13px] w-[13px] animate-spin" />
+                    <Loader2
+                      aria-hidden
+                      className="h-[13px] w-[13px] animate-spin"
+                    />
                   ) : thread.isResolved ? (
-                    <RotateCcw aria-hidden strokeWidth={2} className="h-[13px] w-[13px]" />
+                    <RotateCcw
+                      aria-hidden
+                      strokeWidth={2}
+                      className="h-[13px] w-[13px]"
+                    />
                   ) : (
-                    <Check aria-hidden strokeWidth={2} className="h-[13px] w-[13px]" />
+                    <Check
+                      aria-hidden
+                      strokeWidth={2}
+                      className="h-[13px] w-[13px]"
+                    />
                   )}
-                  {thread.isResolved ? 'Reopen thread' : 'Resolve thread'}
+                  {thread.isResolved ? "Reopen thread" : "Resolve thread"}
                 </button>
               )}
               {error && <span className="text-2xs text-danger">{error}</span>}
@@ -281,7 +408,7 @@ function ThreadCard({
   );
 }
 
-export function ThreadsPanel({
+export function CommentsPanel({
   pr,
   unreadSinceMs,
   onChanged,
@@ -296,11 +423,34 @@ export function ThreadsPanel({
   openFirst?: boolean;
   fill?: boolean;
 }) {
+  const comments = pr.prComments ?? [];
+  const threads = pr.unresolvedThreads;
+  const isUnread = (ts: string) =>
+    unreadSinceMs > 0 && Boolean(ts) && new Date(ts).getTime() > unreadSinceMs;
+
+  const rows = [
+    ...comments.map((comment) => ({
+      ts: comment.createdAt,
+      comment,
+      thread: null,
+    })),
+    ...threads.map((thread) => ({
+      ts: thread.createdAt,
+      comment: null,
+      thread,
+    })),
+  ].sort((a, b) => a.ts.localeCompare(b.ts));
+
+  const firstThreadId = threads[0]?.id;
+
   return (
     <section className={panelRoot(fill)}>
       <header className={PANEL_HEAD}>
+        <span className="font-bold text-ink">Comments</span>
+        <CountPill>{comments.length}</CountPill>
+        <span aria-hidden className="h-3.5 w-px bg-line" />
         <span className="font-bold text-ink">Unresolved threads</span>
-        <CountPill>{pr.unresolvedThreads.length}</CountPill>
+        <CountPill>{threads.length}</CountPill>
         <a
           href={`${pr.url}/files`}
           target="_blank"
@@ -311,23 +461,29 @@ export function ThreadsPanel({
         </a>
       </header>
 
-      {pr.unresolvedThreads.length === 0 ? (
-        <p className={PANEL_EMPTY}>Every review thread is resolved.</p>
+      {rows.length === 0 ? (
+        <p className={PANEL_EMPTY}>
+          Nobody commented, and every review thread is resolved.
+        </p>
       ) : (
         <ul className={panelScroller(fill)}>
-          {pr.unresolvedThreads.map((thread, i) => (
-            <ThreadCard
-              key={thread.id}
-              thread={thread}
-              defaultOpen={openFirst && i === 0}
-              unread={
-                unreadSinceMs > 0 &&
-                Boolean(thread.createdAt) &&
-                new Date(thread.createdAt).getTime() > unreadSinceMs
-              }
-              onChanged={onChanged}
-            />
-          ))}
+          {rows.map((row) =>
+            row.comment ? (
+              <PrCommentCard
+                key={row.comment.id}
+                comment={row.comment}
+                unread={isUnread(row.comment.createdAt)}
+              />
+            ) : (
+              <ThreadCard
+                key={row.thread!.id}
+                thread={row.thread!}
+                defaultOpen={openFirst && row.thread!.id === firstThreadId}
+                unread={isUnread(row.thread!.createdAt)}
+                onChanged={onChanged}
+              />
+            ),
+          )}
         </ul>
       )}
     </section>

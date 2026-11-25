@@ -6,6 +6,7 @@ import {
   PullRequestAssessment,
   ReviewStatus,
   ReviewThreadItem,
+  ThreadComment,
   ViewerReviewState,
 } from '../types/pr';
 
@@ -123,6 +124,12 @@ interface RawPRNode {
       };
     }>;
   };
+  comments?: {
+    nodes: RawComment[];
+  };
+  reviews?: {
+    nodes: Array<RawComment & { state?: string | null }>;
+  };
   reviewThreads?: {
     nodes: RawReviewThread[];
   };
@@ -138,6 +145,18 @@ interface RawPRNode {
         };
       };
     }>;
+  };
+}
+
+function toThreadComment(c: RawComment): ThreadComment {
+  return {
+    id: c.id,
+    author: c.author?.login || 'ghost',
+    authorAvatarUrl: c.author?.avatarUrl || undefined,
+    bodyHTML: c.bodyHTML || '',
+    bodyText: c.bodyText || '',
+    createdAt: c.createdAt,
+    url: c.url,
   };
 }
 
@@ -301,17 +320,16 @@ export function normalizePullRequests(rawNodes: RawPRNode[]): PullRequestAssessm
           url: lastComment?.url || firstComment?.url || pr.url,
           replyCount: Math.max((t.comments.totalCount ?? raw.length) - 1, 0),
           replies: dedupeByLogin(replies),
-          comments: raw.map((c) => ({
-            id: c.id,
-            author: c.author?.login || 'ghost',
-            authorAvatarUrl: c.author?.avatarUrl || undefined,
-            bodyHTML: c.bodyHTML || '',
-            bodyText: c.bodyText || '',
-            createdAt: c.createdAt,
-            url: c.url,
-          })),
+          comments: raw.map(toThreadComment),
         };
       });
+
+    const prComments: ThreadComment[] = [
+      ...(pr.comments?.nodes || []).map((c) => toThreadComment(c)),
+      ...(pr.reviews?.nodes || [])
+        .filter((r) => (r.bodyText || '').trim() !== '')
+        .map((r) => ({ ...toThreadComment(r), reviewState: r.state || undefined })),
+    ].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 
     // 5. Mergeability Dimension & Merge Queue State
     const inQueue = Boolean(pr.isInMergeQueue || pr.mergeQueueEntry);
@@ -422,6 +440,7 @@ export function normalizePullRequests(rawNodes: RawPRNode[]): PullRequestAssessm
       mergeQueueInfo,
       checkRuns,
       unresolvedThreads,
+      prComments,
     };
   });
 
@@ -485,6 +504,7 @@ export function normalizePullRequests(rawNodes: RawPRNode[]): PullRequestAssessm
       mergeQueueInfo: pr.mergeQueueInfo,
       checkRuns: pr.checkRuns,
       unresolvedThreads: pr.unresolvedThreads,
+      prComments: pr.prComments,
     };
   });
 }

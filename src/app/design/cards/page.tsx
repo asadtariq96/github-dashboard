@@ -50,7 +50,7 @@ export default function CardDesignPage() {
                 pr={FIXTURES[0].pr}
                 mode="mine"
                 isExpanded
-                defaultTab="threads"
+                defaultTab="comments"
                 openFirstThread
                 onToggleExpand={() => undefined}
                 onToggleHide={() => undefined}

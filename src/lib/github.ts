@@ -357,6 +357,33 @@ query FetchOpenPullRequests($query: String!, $first: Int!, $after: String) {
             }
           }
         }
+        comments(last: 20) {
+          nodes {
+            id
+            bodyText
+            bodyHTML
+            createdAt
+            url
+            author {
+              login
+              avatarUrl
+            }
+          }
+        }
+        reviews(last: 20) {
+          nodes {
+            id
+            state
+            bodyText
+            bodyHTML
+            createdAt
+            url
+            author {
+              login
+              avatarUrl
+            }
+          }
+        }
         reviewThreads(first: 50) {
           nodes {
             id

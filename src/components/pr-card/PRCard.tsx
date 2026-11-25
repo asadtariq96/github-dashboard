@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import React, { useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import {
   Book,
   Check,
@@ -21,82 +21,113 @@ import {
   RefreshCw,
   Rocket,
   Train,
-} from 'lucide-react';
-import type { PrActivityInfo, PullRequestAssessment } from '../../types/pr';
-import type { Mode } from '../../lib/config';
+} from "lucide-react";
+import type { PrActivityInfo, PullRequestAssessment } from "../../types/pr";
+import type { Mode } from "../../lib/config";
 import {
   allActionsFor,
   reverseActionsFor,
   type RowAction,
   type RowActionId,
-} from '../../lib/rowAction';
-import { blockedReason } from '../../lib/status';
-import { EASE_OUT, FADE_IN } from '../../lib/motion';
-import { summarizeChecks } from '../../lib/checks';
-import { computeNew, recordSnapshot, recordVisit } from '../../lib/visited';
-import { PRStateIcon, TimePair } from './CardMeta';
-import { StatusChips } from './chips';
-import dynamic from 'next/dynamic';
-const ChecksPanel = dynamic(() => import('./ChecksPanel').then((m) => m.ChecksPanel), {
-  loading: () => <p className="px-5 py-4 text-sm text-muted">Loading checks…</p>,
-});
-const ThreadsPanel = dynamic(() => import('./ThreadsPanel').then((m) => m.ThreadsPanel), {
-  loading: () => <p className="px-5 py-4 text-sm text-muted">Loading threads…</p>,
-});
-const DescriptionPanel = dynamic(
-  () => import('./DescriptionPanel').then((m) => m.DescriptionPanel),
-  { loading: () => <p className="px-5 py-4 text-sm text-muted">Loading description…</p> },
+} from "../../lib/rowAction";
+import { blockedReason } from "../../lib/status";
+import { EASE_OUT, FADE_IN } from "../../lib/motion";
+import { summarizeChecks } from "../../lib/checks";
+import { computeNew, recordSnapshot, recordVisit } from "../../lib/visited";
+import { PRStateIcon, TimePair } from "./CardMeta";
+import { StatusChips } from "./chips";
+import dynamic from "next/dynamic";
+const ChecksPanel = dynamic(
+  () => import("./ChecksPanel").then((m) => m.ChecksPanel),
+  {
+    loading: () => (
+      <p className="px-5 py-4 text-sm text-muted">Loading checks…</p>
+    ),
+  },
 );
-const MergeQueuePanel = dynamic(() => import('./MergeQueuePanel').then((m) => m.MergeQueuePanel), {
-  loading: () => <p className="px-5 py-4 text-sm text-muted">Loading merge queue…</p>,
-});
-const DiffPanel = dynamic(() => import('./DiffPanel').then((m) => m.DiffPanel), {
-  loading: () => <p className="px-5 py-4 text-sm text-muted">Loading changed files…</p>,
-});
-import { ActionButton, CountPill, DiffBar, DiffStat, SplitButton, type MenuItem } from './ui';
+const CommentsPanel = dynamic(
+  () => import("./CommentsPanel").then((m) => m.CommentsPanel),
+  {
+    loading: () => (
+      <p className="px-5 py-4 text-sm text-muted">Loading threads…</p>
+    ),
+  },
+);
+const DescriptionPanel = dynamic(
+  () => import("./DescriptionPanel").then((m) => m.DescriptionPanel),
+  {
+    loading: () => (
+      <p className="px-5 py-4 text-sm text-muted">Loading description…</p>
+    ),
+  },
+);
+const MergeQueuePanel = dynamic(
+  () => import("./MergeQueuePanel").then((m) => m.MergeQueuePanel),
+  {
+    loading: () => (
+      <p className="px-5 py-4 text-sm text-muted">Loading merge queue…</p>
+    ),
+  },
+);
+const DiffPanel = dynamic(
+  () => import("./DiffPanel").then((m) => m.DiffPanel),
+  {
+    loading: () => (
+      <p className="px-5 py-4 text-sm text-muted">Loading changed files…</p>
+    ),
+  },
+);
+import {
+  ActionButton,
+  CountPill,
+  DiffBar,
+  DiffStat,
+  SplitButton,
+  type MenuItem,
+} from "./ui";
 
-export type TabId = 'description' | 'queue' | 'checks' | 'threads' | 'files';
+export type TabId = "description" | "queue" | "checks" | "comments" | "files";
 
 const TABS: { id: TabId; label: string; icon: typeof ListChecks }[] = [
-  { id: 'description', label: 'Description', icon: FileText },
-  { id: 'queue', label: 'Merge queue', icon: Train },
-  { id: 'checks', label: 'Checks', icon: ListChecks },
-  { id: 'threads', label: 'Threads', icon: MessageSquare },
-  { id: 'files', label: 'Files', icon: FileText },
+  { id: "description", label: "Description", icon: FileText },
+  { id: "queue", label: "Merge queue", icon: Train },
+  { id: "checks", label: "Checks", icon: ListChecks },
+  { id: "comments", label: "Comments", icon: MessageSquare },
+  { id: "files", label: "Files", icon: FileText },
 ];
 
 const ACTION_ICON: Record<
   RowActionId,
   React.ComponentType<{ className?: string; strokeWidth?: number }>
 > = {
-  'approve-deployment': Rocket,
-  'update-branch': GitMerge,
-  'rerun-checks': RefreshCw,
+  "approve-deployment": Rocket,
+  "update-branch": GitMerge,
+  "rerun-checks": RefreshCw,
   merge: Check,
-  'auto-merge': Clock,
-  'mark-ready': Check,
+  "auto-merge": Clock,
+  "mark-ready": Check,
   dequeue: CircleMinus,
   close: CircleSlash,
 };
 
-const SPLIT_TONE: Record<RowActionId, 'accent' | 'ready' | 'danger'> = {
-  'approve-deployment': 'danger',
-  'update-branch': 'accent',
-  'rerun-checks': 'accent',
-  merge: 'ready',
-  'auto-merge': 'ready',
-  'mark-ready': 'accent',
-  dequeue: 'accent',
-  close: 'danger',
+const SPLIT_TONE: Record<RowActionId, "accent" | "ready" | "danger"> = {
+  "approve-deployment": "danger",
+  "update-branch": "accent",
+  "rerun-checks": "accent",
+  merge: "ready",
+  "auto-merge": "ready",
+  "mark-ready": "accent",
+  dequeue: "accent",
+  close: "danger",
 };
 
-const REVERSE_TONE: Record<string, 'danger' | 'warn'> = {
-  close: 'danger',
-  dequeue: 'warn',
+const REVERSE_TONE: Record<string, "danger" | "warn"> = {
+  close: "danger",
+  dequeue: "warn",
 };
 
 const ICON_BUTTON =
-  'pointer-safe inline-flex shrink-0 items-center justify-center rounded-full border border-line bg-surface-raised p-1.5 text-dim shadow-sm transition-all duration-instant ease-out hover:-translate-y-px hover:border-line-strong hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent';
+  "pointer-safe inline-flex shrink-0 items-center justify-center rounded-full border border-line bg-surface-raised p-1.5 text-dim shadow-sm transition-all duration-instant ease-out hover:-translate-y-px hover:border-line-strong hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent";
 
 export function PRCard({
   pr,
@@ -153,7 +184,7 @@ export function PRCard({
 }) {
   // A queued pull request opens on the queue, because that is what decides its fate.
   const [internalTab, setInternalTab] = useState<TabId>(
-    defaultTab ?? (pr.isInMergeQueue ? 'queue' : 'checks'),
+    defaultTab ?? (pr.isInMergeQueue ? "queue" : "checks"),
   );
   const tab = activeTab ?? internalTab;
   const setTab = (next: TabId) => {
@@ -165,8 +196,9 @@ export function PRCard({
   const newActivity = computeNew(activity, prKey);
   const blocked = blockedReason(mode, pr);
   const { total: checkTotal } = summarizeChecks(pr);
-  const threadTotal = pr.unresolvedThreads.length;
-  const hasConflicts = pr.mergeability === 'Merge Conflicts';
+  const conversationTotal =
+    (pr.prComments?.length ?? 0) + pr.unresolvedThreads.length;
+  const hasConflicts = pr.mergeability === "Merge Conflicts";
 
   const actions = onRunAction ? allActionsFor(pr) : [];
   const primary: RowAction | undefined = actions[0];
@@ -191,25 +223,29 @@ export function PRCard({
     <article
       aria-selected={onToggleSelect ? selected : undefined}
       className={`overflow-hidden rounded-lg border bg-surface shadow-sm transition-all duration-fast ease-out ${
-        fillAvailable ? 'h-full' : ''
+        fillAvailable ? "h-full" : ""
       } ${
         selected || inspected
-          ? 'border-accent shadow-md'
+          ? "border-accent shadow-md"
           : isExpanded
-            ? 'border-line-strong shadow-md'
-            : 'border-line hover:border-line-strong hover:shadow-md'
+            ? "border-line-strong shadow-md"
+            : "border-line hover:border-line-strong hover:shadow-md"
       }`}
     >
-      <div className={fillAvailable ? 'flex h-full min-h-0 flex-col' : ''}>
+      <div className={fillAvailable ? "flex h-full min-h-0 flex-col" : ""}>
         <div
           onClick={onToggleExpand}
           className={`flex cursor-pointer select-none items-center transition-colors duration-instant ease-out hover:bg-surface-hover ${
-            contained ? 'flex-wrap gap-2 px-3 py-2.5' : 'flex-wrap gap-3 px-4 py-3'
+            contained
+              ? "flex-wrap gap-2 px-3 py-2.5"
+              : "flex-wrap gap-3 px-4 py-3"
           }`}
         >
           <div
             className={`flex min-w-0 ${
-              contained ? 'w-full items-start gap-2' : 'flex-[1_1_20rem] items-center gap-3'
+              contained
+                ? "w-full items-start gap-2"
+                : "flex-[1_1_20rem] items-center gap-3"
             }`}
           >
             {onToggleSelect && (
@@ -228,7 +264,7 @@ export function PRCard({
                   onToggleSelect(e.shiftKey);
                 }}
                 aria-label={`Select pull request ${pr.number}`}
-                className={`shrink-0 cursor-pointer accent-accent-fill ${contained ? 'mt-1 h-3.5 w-3.5' : 'pointer-safe'}`}
+                className={`shrink-0 cursor-pointer accent-accent-fill ${contained ? "mt-1 h-3.5 w-3.5" : "pointer-safe"}`}
               />
             )}
 
@@ -246,7 +282,7 @@ export function PRCard({
               }
               className={
                 contained
-                  ? 'shrink-0 rounded p-0.5 text-dim hover:bg-surface-muted hover:text-ink'
+                  ? "shrink-0 rounded p-0.5 text-dim hover:bg-surface-muted hover:text-ink"
                   : ICON_BUTTON
               }
             >
@@ -254,7 +290,7 @@ export function PRCard({
                 aria-hidden
                 strokeWidth={2}
                 className={`h-4 w-4 transition-transform duration-fast ease-out ${
-                  isExpanded ? 'rotate-180' : ''
+                  isExpanded ? "rotate-180" : ""
                 }`}
               />
             </button>
@@ -272,8 +308,10 @@ export function PRCard({
                     e.stopPropagation();
                     visit();
                   }}
-                  className={`${contained ? 'line-clamp-2 text-[13px] leading-snug' : isExpanded ? 'break-words text-[15px]' : 'truncate text-[15px]'} tracking-[-0.01em] hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${
-                    newActivity.count > 0 ? 'font-bold text-ink' : 'font-semibold text-ink'
+                  className={`${contained ? "line-clamp-2 text-[13px] leading-snug" : isExpanded ? "break-words text-[15px]" : "truncate text-[15px]"} tracking-[-0.01em] hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${
+                    newActivity.count > 0
+                      ? "font-bold text-ink"
+                      : "font-semibold text-ink"
                   }`}
                 >
                   {pr.title}
@@ -284,24 +322,35 @@ export function PRCard({
               </div>
 
               <div
-                className={`mt-1 text-xs text-dim ${contained ? 'space-y-1' : 'flex flex-wrap items-center gap-x-3 gap-y-1'}`}
+                className={`mt-1 text-xs text-dim ${contained ? "space-y-1" : "flex flex-wrap items-center gap-x-3 gap-y-1"}`}
               >
                 <div className="flex min-w-0 items-start gap-1.5">
-                  <Book aria-hidden strokeWidth={2} className="mt-0.5 h-3 w-3 shrink-0" />
-                  <span className="break-all" title={pr.repository.nameWithOwner}>
+                  <Book
+                    aria-hidden
+                    strokeWidth={2}
+                    className="mt-0.5 h-3 w-3 shrink-0"
+                  />
+                  <span
+                    className="break-all"
+                    title={pr.repository.nameWithOwner}
+                  >
                     {pr.repository.nameWithOwner}
                   </span>
                 </div>
                 <div className="flex min-w-0 items-start gap-1.5 font-mono text-2xs text-muted">
-                  <GitBranch aria-hidden strokeWidth={2} className="mt-0.5 h-3 w-3 shrink-0" />
+                  <GitBranch
+                    aria-hidden
+                    strokeWidth={2}
+                    className="mt-0.5 h-3 w-3 shrink-0"
+                  />
                   <span
                     className="min-w-0 break-all"
                     title={`${pr.headRefName} → ${pr.baseRefName}`}
                   >
-                    {pr.headRefName}{' '}
+                    {pr.headRefName}{" "}
                     <span aria-hidden className="text-faint">
                       →
-                    </span>{' '}
+                    </span>{" "}
                     {pr.baseRefName}
                   </span>
                 </div>
@@ -311,8 +360,8 @@ export function PRCard({
 
           <div
             className={`${
-              hideStats ? 'hidden' : contained ? 'flex' : 'hidden lg:flex'
-            } min-w-0 flex-wrap items-center gap-2 ${contained ? 'max-w-full flex-1' : 'shrink-0'}`}
+              hideStats ? "hidden" : contained ? "flex" : "hidden lg:flex"
+            } min-w-0 flex-wrap items-center gap-2 ${contained ? "max-w-full flex-1" : "shrink-0"}`}
           >
             {pr.additions + pr.deletions > 0 && (
               <span
@@ -320,7 +369,9 @@ export function PRCard({
                 className="flex shrink-0 items-center gap-1.5"
               >
                 <DiffStat additions={pr.additions} deletions={pr.deletions} />
-                {!contained && <DiffBar additions={pr.additions} deletions={pr.deletions} />}
+                {!contained && (
+                  <DiffBar additions={pr.additions} deletions={pr.deletions} />
+                )}
               </span>
             )}
             <StatusChips pr={pr} />
@@ -328,7 +379,7 @@ export function PRCard({
 
           <div
             onClick={(e) => e.stopPropagation()}
-            className={`${contained ? 'ml-auto flex-wrap' : 'ml-auto'} flex shrink-0 items-center gap-2.5`}
+            className={`${contained ? "ml-auto flex-wrap" : "ml-auto"} flex shrink-0 items-center gap-2.5`}
           >
             <TimePair pr={pr} />
 
@@ -406,10 +457,12 @@ export function PRCard({
             <motion.div
               key="body"
               className={
-                fillAvailable ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : 'overflow-hidden'
+                fillAvailable
+                  ? "flex min-h-0 flex-1 flex-col overflow-hidden"
+                  : "overflow-hidden"
               }
               initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
+              animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               transition={{
                 height: { duration: 0.28, ease: EASE_OUT },
@@ -422,9 +475,12 @@ export function PRCard({
                   aria-label={`Detail for pull request ${pr.number}`}
                   className="flex items-center gap-1"
                 >
-                  {TABS.filter((item) => item.id !== 'queue' || pr.isInMergeQueue).map((item) => {
+                  {TABS.filter(
+                    (item) => item.id !== "queue" || pr.isInMergeQueue,
+                  ).map((item) => {
                     const selected = item.id === tab;
-                    const count = item.id === 'checks' ? checkTotal : threadTotal;
+                    const count =
+                      item.id === "checks" ? checkTotal : conversationTotal;
                     return (
                       <button
                         key={item.id}
@@ -434,8 +490,8 @@ export function PRCard({
                         onClick={() => setTab(item.id)}
                         className={`-mb-px flex items-center gap-1.5 border-b-2 px-3.5 py-2.5 text-sm transition-colors duration-instant ease-out focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent ${
                           selected
-                            ? 'border-accent font-semibold text-accent'
-                            : 'border-transparent font-medium text-muted hover:text-ink'
+                            ? "border-accent font-semibold text-accent"
+                            : "border-transparent font-medium text-muted hover:text-ink"
                         }`}
                       >
                         <item.icon
@@ -444,7 +500,7 @@ export function PRCard({
                           className="h-[15px] w-[15px] opacity-80"
                         />
                         {item.label}
-                        {(item.id === 'checks' || item.id === 'threads') && (
+                        {(item.id === "checks" || item.id === "comments") && (
                           <CountPill active={selected}>{count}</CountPill>
                         )}
                       </button>
@@ -455,7 +511,9 @@ export function PRCard({
                 {blocked && (
                   <p className="hidden items-center gap-2 py-2.5 xl:flex">
                     <span aria-hidden className="h-3.5 w-px bg-line" />
-                    <span className="text-xs font-medium text-warn">{blocked.label}</span>
+                    <span className="text-xs font-medium text-warn">
+                      {blocked.label}
+                    </span>
                   </p>
                 )}
 
@@ -475,15 +533,18 @@ export function PRCard({
                     <ActionButton
                       icon={CircleMinus}
                       tone="warn"
-                      onClick={() => onRunAction!(pr, 'dequeue')}
-                      busy={busyAction === 'dequeue'}
+                      onClick={() => onRunAction!(pr, "dequeue")}
+                      busy={busyAction === "dequeue"}
                       disabled={busyAction !== null}
                     >
                       Remove from queue
                     </ActionButton>
                   )}
                   {pr.isInMergeQueue && pr.mergeQueueInfo?.url && (
-                    <ActionButton icon={ListChecks} href={pr.mergeQueueInfo.url}>
+                    <ActionButton
+                      icon={ListChecks}
+                      href={pr.mergeQueueInfo.url}
+                    >
                       View queue
                     </ActionButton>
                   )}
@@ -493,22 +554,26 @@ export function PRCard({
               {/* One tab, one panel, the whole width. The panel scrolls itself when it fills. */}
               <div
                 className={
-                  fillAvailable ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : 'min-h-0'
+                  fillAvailable
+                    ? "flex min-h-0 flex-1 flex-col overflow-hidden"
+                    : "min-h-0"
                 }
               >
-                {tab === 'description' ? (
+                {tab === "description" ? (
                   <DescriptionPanel pr={pr} fill={fillAvailable} />
-                ) : tab === 'files' ? (
+                ) : tab === "files" ? (
                   <DiffPanel pr={pr} fill={fillAvailable} />
-                ) : tab === 'queue' ? (
+                ) : tab === "queue" ? (
                   <MergeQueuePanel pr={pr} fill={fillAvailable} />
-                ) : tab === 'checks' ? (
+                ) : tab === "checks" ? (
                   <ChecksPanel pr={pr} fill={fillAvailable} />
                 ) : (
-                  <ThreadsPanel
+                  <CommentsPanel
                     pr={pr}
                     unreadSinceMs={
-                      newActivity.thresholdTs ? new Date(newActivity.thresholdTs).getTime() : 0
+                      newActivity.thresholdTs
+                        ? new Date(newActivity.thresholdTs).getTime()
+                        : 0
                     }
                     onChanged={onRefresh ?? (() => undefined)}
                     openFirst={openFirstThread}
@@ -522,7 +587,7 @@ export function PRCard({
                   <ActionButton
                     key={action.id}
                     icon={ACTION_ICON[action.id]}
-                    tone={action.id === 'merge' ? 'fillReady' : 'outline'}
+                    tone={action.id === "merge" ? "fillReady" : "outline"}
                     onClick={() => onRunAction!(pr, action.id)}
                     busy={busyAction === action.id}
                     disabled={busyAction !== null}
@@ -531,7 +596,11 @@ export function PRCard({
                   </ActionButton>
                 ))}
                 {hasConflicts && (
-                  <ActionButton icon={GitMerge} tone="fillWarn" href={`${pr.url}/conflicts`}>
+                  <ActionButton
+                    icon={GitMerge}
+                    tone="fillWarn"
+                    href={`${pr.url}/conflicts`}
+                  >
                     Resolve conflicts
                   </ActionButton>
                 )}
@@ -550,8 +619,11 @@ export function PRCard({
                     </ActionButton>
                   ))}
                   {onToggleHide && (
-                    <ActionButton icon={isHidden ? Eye : EyeOff} onClick={onToggleHide}>
-                      {isHidden ? 'Show on desk' : 'Hide from desk'}
+                    <ActionButton
+                      icon={isHidden ? Eye : EyeOff}
+                      onClick={onToggleHide}
+                    >
+                      {isHidden ? "Show on desk" : "Hide from desk"}
                     </ActionButton>
                   )}
                 </span>
